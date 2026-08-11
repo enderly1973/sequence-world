@@ -129,6 +129,14 @@ export default function SubordinatesPage() {
     useState(false);
 
   const [
+    releasingId,
+    setReleasingId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
     errorMessage,
     setErrorMessage,
   ] =
@@ -498,6 +506,79 @@ export default function SubordinatesPage() {
     } finally {
       setSaving(
         false
+      );
+    }
+  }
+
+  async function handleReleaseSubordinate(
+    subordinate: Subordinate
+  ) {
+    if (
+      releasingId
+    ) {
+      return;
+    }
+
+    const confirmed =
+  window.confirm(
+    `確定要解除與「${subordinate.nickname}」的主從關係嗎？\n\n解除後，雙方將無法繼續使用此主從聊天室。`
+  );
+
+    if (
+      !confirmed
+    ) {
+      return;
+    }
+
+    setReleasingId(
+      subordinate.id
+    );
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          "release_my_subordinate",
+          {
+            p_subordinate_id:
+              subordinate.id,
+          }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setSubordinates(
+        (
+          current
+        ) =>
+          current.filter(
+            (
+              item
+            ) =>
+              item.id !==
+              subordinate.id
+          )
+      );
+
+      setSuccessMessage(
+        `已解除與「${subordinate.nickname}」的主從關係。`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof
+          Error
+          ? error.message
+          : "解除主從關係時發生錯誤。"
+      );
+    } finally {
+      setReleasingId(
+        null
       );
     }
   }
@@ -936,6 +1017,25 @@ export default function SubordinatesPage() {
                             </span>
 
                           )}
+
+                          <button
+                            type="button"
+                            disabled={
+                              releasingId !==
+                              null
+                            }
+                            onClick={() =>
+                              void handleReleaseSubordinate(
+                                subordinate
+                              )
+                            }
+                            className="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {releasingId ===
+                            subordinate.id
+                              ? "解除中…"
+                              : "解除關係"}
+                          </button>
 
                         </div>
 
