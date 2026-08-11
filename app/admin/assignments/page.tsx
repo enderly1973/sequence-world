@@ -282,7 +282,8 @@ export default function AdminAssignmentsPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(180px, 1fr))",
               gap: 14,
               marginBottom: 24,
             }}
@@ -295,9 +296,15 @@ export default function AdminAssignmentsPage() {
                 padding: 18,
               }}
             >
-              <div style={{ color: "#777", fontSize: 13 }}>
+              <div
+                style={{
+                  color: "#777",
+                  fontSize: 13,
+                }}
+              >
                 全部紀錄
               </div>
+
               <div
                 style={{
                   marginTop: 8,
@@ -317,9 +324,15 @@ export default function AdminAssignmentsPage() {
                 padding: 18,
               }}
             >
-              <div style={{ color: "#6ee7b7", fontSize: 13 }}>
+              <div
+                style={{
+                  color: "#6ee7b7",
+                  fontSize: 13,
+                }}
+              >
                 目前有效
               </div>
+
               <div
                 style={{
                   marginTop: 8,
@@ -340,9 +353,15 @@ export default function AdminAssignmentsPage() {
                 padding: 18,
               }}
             >
-              <div style={{ color: "#a1a1aa", fontSize: 13 }}>
+              <div
+                style={{
+                  color: "#a1a1aa",
+                  fontSize: 13,
+                }}
+              >
                 已解除
               </div>
+
               <div
                 style={{
                   marginTop: 8,
@@ -362,9 +381,15 @@ export default function AdminAssignmentsPage() {
                 padding: 18,
               }}
             >
-              <div style={{ color: "#c4b5fd", fontSize: 13 }}>
+              <div
+                style={{
+                  color: "#c4b5fd",
+                  fontSize: 13,
+                }}
+              >
                 系統分配
               </div>
+
               <div
                 style={{
                   marginTop: 8,
@@ -478,11 +503,30 @@ export default function AdminAssignmentsPage() {
           {filteredRecords.map((record) => (
             <div
               key={record.id}
+              onClick={() =>
+                router.push(
+                  `/admin/assignments/${record.id}`
+                )
+              }
               style={{
                 background: "#111",
                 border: "1px solid #292929",
                 borderRadius: 12,
                 padding: 20,
+                cursor: "pointer",
+                transition: "0.2s",
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.borderColor =
+                  "#555";
+                event.currentTarget.style.background =
+                  "#161616";
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.borderColor =
+                  "#292929";
+                event.currentTarget.style.background =
+                  "#111";
               }}
             >
               <div
@@ -521,7 +565,9 @@ export default function AdminAssignmentsPage() {
                       fontSize: 14,
                     }}
                   >
-                    {getRelationType(record.relation_type)}
+                    {getRelationType(
+                      record.relation_type
+                    )}
                   </div>
                 </div>
 
@@ -565,6 +611,16 @@ export default function AdminAssignmentsPage() {
                 <div>
                   解除時間：
                   {formatDate(record.ended_at)}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    color: "#ef4444",
+                    fontSize: 13,
+                  }}
+                >
+                  查看詳情 →
                 </div>
               </div>
             </div>
