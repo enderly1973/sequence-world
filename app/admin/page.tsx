@@ -632,6 +632,12 @@ export default function AdminPage() {
             />
 
             <AdminCard
+  href="/admin/assignments"
+  title="歸屬分配紀錄"
+  text="查看主從關係的系統分配、建立與解除歷程。"
+/>
+
+            <AdminCard
               href="/admin/settings"
               title="世界設定"
               text="調整每日獎勵、競技積分與階級參數。"
