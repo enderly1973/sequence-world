@@ -26,6 +26,7 @@ type RelationRow = {
 };
 
 type SuperiorInfo = {
+  relationId: string;
   profile: ProfileSummary;
   relationType: RelationRow["relation_type"];
   createdAt: string;
@@ -51,7 +52,9 @@ export default function HierarchyPage() {
     useState<SubordinateInfo[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [leaving, setLeaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     loadHierarchy();
@@ -127,6 +130,7 @@ export default function HierarchyPage() {
         }
 
         setSuperior({
+          relationId: superiorRelation.id,
           profile: superiorProfile as ProfileSummary,
           relationType: superiorRelation.relation_type,
           createdAt: superiorRelation.created_at,
@@ -229,6 +233,49 @@ export default function HierarchyPage() {
     }
   }
 
+  async function handleLeaveSuperior() {
+    if (!superior || leaving) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `確定要解除對「${superior.profile.nickname}」的歸屬關係嗎？\n\n解除後，雙方將無法繼續使用此主從聊天室。`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setLeaving(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "leave_my_superior"
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      const superiorName = superior.profile.nickname;
+
+      setSuperior(null);
+      setSuccessMessage(
+        `已解除對「${superiorName}」的歸屬關係。`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "解除歸屬關係時發生錯誤。"
+      );
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   function formatSequence(sequence: number) {
     return String(sequence).padStart(6, "0");
   }
@@ -312,6 +359,12 @@ export default function HierarchyPage() {
           </div>
         )}
 
+        {successMessage && (
+          <div className="mb-6 rounded-xl border border-emerald-900 bg-emerald-950/30 p-4 text-emerald-300">
+            {successMessage}
+          </div>
+        )}
+
         <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
           <p className="text-sm text-neutral-500">
             我的上級
@@ -348,6 +401,17 @@ export default function HierarchyPage() {
                 關係建立日期：
                 {formatDate(superior.createdAt)}
               </p>
+
+              <div className="mt-5 border-t border-neutral-800 pt-4">
+                <button
+                  type="button"
+                  disabled={leaving}
+                  onClick={() => void handleLeaveSuperior()}
+                  className="rounded-lg border border-red-900 px-4 py-2 text-sm text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {leaving ? "解除中…" : "解除歸屬"}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="mt-5 rounded-xl bg-neutral-950 p-5 text-neutral-400">
