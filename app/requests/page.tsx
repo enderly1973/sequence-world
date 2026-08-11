@@ -12,35 +12,11 @@ type ProfileSummary = {
   join_sequence: number;
 };
 
-type RequestStatus =
-  | "pending"
-  | "accepted"
-  | "rejected"
-  | "cancelled";
-
-type RequestRow = {
-  id: string;
-  requester_id: string;
-  target_id: string;
-  request_type: "voluntary_subordination";
-  status: RequestStatus;
-  message: string | null;
-  created_at: string;
-  responded_at: string | null;
-};
-
-type RequestDisplay = {
-  request: RequestRow;
-  otherProfile: ProfileSummary;
-};
-
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
+  if (error instanceof Error && error.message) return error.message;
 
   if (typeof error === "object" && error !== null) {
-    const supabaseError = error as {
+    const e = error as {
       message?: string;
       details?: string;
       hint?: string;
@@ -48,20 +24,16 @@ function getErrorMessage(error: unknown, fallback: string) {
     };
 
     const parts = [
-      supabaseError.message,
-      supabaseError.details,
-      supabaseError.hint,
-      supabaseError.code
-        ? `錯誤代碼：${supabaseError.code}`
-        : null,
+      e.message,
+      e.details,
+      e.hint,
+      e.code ? `錯誤代碼：${e.code}` : null,
     ].filter(
       (item): item is string =>
         typeof item === "string" && item.length > 0
     );
 
-    if (parts.length > 0) {
-      return parts.join("｜");
-    }
+    if (parts.length > 0) return parts.join("｜");
   }
 
   return fallback;
@@ -73,26 +45,11 @@ export default function RequestsPage() {
   const [currentProfile, setCurrentProfile] =
     useState<ProfileSummary | null>(null);
 
-  const [candidates, setCandidates] =
-    useState<ProfileSummary[]>([]);
-
-  const [sentRequests, setSentRequests] =
-    useState<RequestDisplay[]>([]);
-
-  const [receivedRequests, setReceivedRequests] =
-    useState<RequestDisplay[]>([]);
-
-  const [selectedTargetId, setSelectedTargetId] =
-    useState("");
-
-  const [message, setMessage] = useState("");
+  const [superior, setSuperior] =
+    useState<ProfileSummary | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [processingId, setProcessingId] =
-    useState<string | null>(null);
-
+  const [assigning, setAssigning] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -110,9 +67,7 @@ export default function RequestsPage() {
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
-        throw userError;
-      }
+      if (userError) throw userError;
 
       if (!user) {
         router.replace("/login");
@@ -124,188 +79,49 @@ export default function RequestsPage() {
         error: profileError,
       } = await supabase
         .from("profiles")
-        .select(
-          "id, nickname, gender, join_sequence"
-        )
+        .select("id, nickname, gender, join_sequence")
         .eq("id", user.id)
         .single();
 
-      if (profileError) {
-        throw profileError;
-      }
+      if (profileError) throw profileError;
 
       const profile = profileData as ProfileSummary;
-
       setCurrentProfile(profile);
 
-      // =========================================
-      // 候選名單
-      //
-      // 一般：
-      // 比自己晚加入的人
-      //
-      // 女性：
-      // 額外可以選所有男性
-      // =========================================
+      const {
+        data: relationData,
+        error: relationError,
+      } = await supabase
+        .from("hierarchy_relations")
+        .select("superior_id")
+        .eq("subordinate_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (relationError) throw relationError;
+
+      if (!relationData?.superior_id) {
+        setSuperior(null);
+        return;
+      }
 
       const {
-        data: allProfiles,
-        error: allProfilesError,
+        data: superiorData,
+        error: superiorError,
       } = await supabase
         .from("profiles")
-        .select(
-          "id, nickname, gender, join_sequence"
-        )
-        .eq("status", "active")
-        .neq("id", profile.id)
-        .order("join_sequence", {
-          ascending: true,
-        });
+        .select("id, nickname, gender, join_sequence")
+        .eq("id", relationData.superior_id)
+        .single();
 
-      if (allProfilesError) {
-        throw allProfilesError;
-      }
+      if (superiorError) throw superiorError;
 
-      const filteredCandidates = (
-        (allProfiles ?? []) as ProfileSummary[]
-      ).filter((candidate) => {
-        // 一般規則：
-        // 可以申請比自己晚加入的人
-        if (
-          candidate.join_sequence >
-          profile.join_sequence
-        ) {
-          return true;
-        }
-
-        // 女性特殊規則：
-        // 女性可以主動申請任何男性
-        if (
-          profile.gender === "female" &&
-          candidate.gender === "male"
-        ) {
-          return true;
-        }
-
-        return false;
-      });
-
-      setCandidates(filteredCandidates);
-
-      // =========================================
-      // 讀取申請紀錄
-      // =========================================
-
-      const {
-        data: requestData,
-        error: requestError,
-      } = await supabase
-        .from("relation_requests")
-        .select(`
-          id,
-          requester_id,
-          target_id,
-          request_type,
-          status,
-          message,
-          created_at,
-          responded_at
-        `)
-        .eq(
-          "request_type",
-          "voluntary_subordination"
-        )
-        .or(
-          `requester_id.eq.${user.id},target_id.eq.${user.id}`
-        )
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (requestError) {
-        throw requestError;
-      }
-
-      const requests =
-        (requestData ?? []) as RequestRow[];
-
-      const relatedProfileIds = Array.from(
-        new Set(
-          requests.map((request) =>
-            request.requester_id === user.id
-              ? request.target_id
-              : request.requester_id
-          )
-        )
-      );
-
-      let profileMap = new Map<
-        string,
-        ProfileSummary
-      >();
-
-      if (relatedProfileIds.length > 0) {
-        const {
-          data: relatedProfiles,
-          error: relatedProfilesError,
-        } = await supabase
-          .from("profiles")
-          .select(
-            "id, nickname, gender, join_sequence"
-          )
-          .in("id", relatedProfileIds);
-
-        if (relatedProfilesError) {
-          throw relatedProfilesError;
-        }
-
-        profileMap = new Map(
-          (
-            (relatedProfiles ??
-              []) as ProfileSummary[]
-          ).map((item) => [item.id, item])
-        );
-      }
-
-      const sent: RequestDisplay[] = [];
-      const received: RequestDisplay[] = [];
-
-      for (const request of requests) {
-        if (request.requester_id === user.id) {
-          const targetProfile =
-            profileMap.get(request.target_id);
-
-          if (targetProfile) {
-            sent.push({
-              request,
-              otherProfile: targetProfile,
-            });
-          }
-        }
-
-        if (request.target_id === user.id) {
-          const requesterProfile =
-            profileMap.get(
-              request.requester_id
-            );
-
-          if (requesterProfile) {
-            received.push({
-              request,
-              otherProfile:
-                requesterProfile,
-            });
-          }
-        }
-      }
-
-      setSentRequests(sent);
-      setReceivedRequests(received);
+      setSuperior(superiorData as ProfileSummary);
     } catch (error) {
       setErrorMessage(
         getErrorMessage(
           error,
-          "讀取申請資料時發生錯誤。"
+          "讀取歸屬資料時發生錯誤。"
         )
       );
     } finally {
@@ -313,99 +129,58 @@ export default function RequestsPage() {
     }
   }
 
-  async function handleCreateRequest() {
-    if (!selectedTargetId) {
-      setErrorMessage(
-        "請先選擇申請對象。"
-      );
-      return;
-    }
+  async function handleRandomAssign() {
+    if (assigning || superior) return;
 
-    setSubmitting(true);
+    const confirmed = window.confirm(
+      "確定要交由系統隨機分配上級嗎？\n\n系統會從目前符合資格且仍可接收從屬者的玩家中隨機配對。"
+    );
+
+    if (!confirmed) return;
+
+    setAssigning(true);
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
-      const { error } = await supabase.rpc(
-        "create_voluntary_subordination_request",
-        {
-          p_target_id: selectedTargetId,
-          p_message:
-            message.trim() || null,
-        }
-      );
+      const {
+        data: superiorId,
+        error,
+      } = await supabase.rpc("random_assign_superior");
 
-      if (error) {
-        setErrorMessage(
-          getErrorMessage(
-            error,
-            "送出申請時發生錯誤。"
-          )
-        );
-        return;
+      if (error) throw error;
+
+      if (!superiorId) {
+        throw new Error("系統沒有回傳分配結果。");
       }
 
-      setSelectedTargetId("");
-      setMessage("");
+      const {
+        data: superiorData,
+        error: superiorError,
+      } = await supabase
+        .from("profiles")
+        .select("id, nickname, gender, join_sequence")
+        .eq("id", superiorId)
+        .single();
 
-      await loadPage();
+      if (superiorError) throw superiorError;
 
-      setSuccessMessage("申請已送出。");
-    } catch (error) {
-      setErrorMessage(
-        getErrorMessage(
-          error,
-          "送出申請時發生錯誤。"
-        )
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
+      const assignedSuperior = superiorData as ProfileSummary;
 
-  async function handleRespond(
-    requestId: string,
-    accept: boolean
-  ) {
-    setProcessingId(requestId);
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    try {
-      const { error } = await supabase.rpc(
-        "respond_voluntary_subordination_request",
-        {
-          p_request_id: requestId,
-          p_accept: accept,
-        }
-      );
-
-      if (error) {
-        setErrorMessage(
-          getErrorMessage(
-            error,
-            "處理申請時發生錯誤。"
-          )
-        );
-        return;
-      }
-
-      await loadPage();
+      setSuperior(assignedSuperior);
 
       setSuccessMessage(
-        accept
-          ? "你已接受這筆申請。"
-          : "你已拒絕這筆申請。"
+        `系統已完成歸屬分配，你的新上級是「${assignedSuperior.nickname}」。`
       );
     } catch (error) {
       setErrorMessage(
         getErrorMessage(
           error,
-          "處理申請時發生錯誤。"
+          "系統分配上級時發生錯誤。"
         )
       );
     } finally {
-      setProcessingId(null);
+      setAssigning(false);
     }
   }
 
@@ -413,73 +188,18 @@ export default function RequestsPage() {
     return String(sequence).padStart(6, "0");
   }
 
-  function formatDate(dateString: string) {
-    return new Intl.DateTimeFormat(
-      "zh-TW",
-      {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    ).format(new Date(dateString));
-  }
-
   function getGenderLabel(
     gender: ProfileSummary["gender"]
   ) {
-    if (gender === "female") {
-      return "女性";
-    }
-
-    if (gender === "male") {
-      return "男性";
-    }
-
+    if (gender === "female") return "女性";
+    if (gender === "male") return "男性";
     return "其他";
-  }
-
-  function getStatusLabel(
-    status: RequestStatus
-  ) {
-    if (status === "pending") {
-      return "等待處理";
-    }
-
-    if (status === "accepted") {
-      return "已接受";
-    }
-
-    if (status === "rejected") {
-      return "已拒絕";
-    }
-
-    return "已取消";
-  }
-
-  function getStatusClass(
-    status: RequestStatus
-  ) {
-    if (status === "accepted") {
-      return "border-emerald-900 text-emerald-300";
-    }
-
-    if (status === "rejected") {
-      return "border-red-900 text-red-300";
-    }
-
-    if (status === "cancelled") {
-      return "border-neutral-700 text-neutral-500";
-    }
-
-    return "border-amber-900 text-amber-300";
   }
 
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-neutral-400">
-        正在讀取申請資料…
+        正在讀取歸屬資料…
       </main>
     );
   }
@@ -487,6 +207,7 @@ export default function RequestsPage() {
   return (
     <main className="min-h-screen bg-neutral-950 px-5 py-10 text-neutral-100">
       <div className="mx-auto max-w-5xl">
+
         <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm tracking-[0.25em] text-neutral-500">
@@ -494,16 +215,13 @@ export default function RequestsPage() {
             </p>
 
             <h1 className="mt-3 text-3xl font-semibold">
-              歸屬申請
+              申請歸屬
             </h1>
 
             {currentProfile && (
               <p className="mt-3 text-neutral-400">
-                {currentProfile.nickname}
-                ・序號{" "}
-                {formatSequence(
-                  currentProfile.join_sequence
-                )}
+                {currentProfile.nickname}・序號{" "}
+                {formatSequence(currentProfile.join_sequence)}
               </p>
             )}
           </div>
@@ -537,303 +255,89 @@ export default function RequestsPage() {
           </div>
         )}
 
-        <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-          <h2 className="text-xl font-medium">
-            提出自願歸屬申請
-          </h2>
+        {superior ? (
+          <section className="rounded-2xl border border-emerald-900/50 bg-emerald-950/20 p-6">
+            <p className="text-sm text-emerald-400">
+              已完成歸屬
+            </p>
 
-          <p className="mt-2 text-sm leading-6 text-neutral-400">
-            一般情況下，你可以向比自己晚加入的成員提出申請。女性也可以主動向男性提出自願歸屬，不受加入先後限制。
-          </p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              目前已有上級
+            </h2>
 
-          <div className="mt-5 space-y-4">
-            <div>
-              <label
-                htmlFor="target"
-                className="mb-2 block text-sm text-neutral-300"
-              >
-                申請對象
-              </label>
+            <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-950 p-5">
+              <p className="text-xl font-medium">
+                {superior.nickname}
+              </p>
 
-              <select
-                id="target"
-                value={selectedTargetId}
-                onChange={(event) =>
-                  setSelectedTargetId(
-                    event.target.value
-                  )
-                }
-                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-neutral-100 outline-none focus:border-neutral-400"
-              >
-                <option value="">
-                  請選擇玩家
-                </option>
-
-                {candidates.map(
-                  (candidate) => (
-                    <option
-                      key={candidate.id}
-                      value={candidate.id}
-                    >
-                      {candidate.nickname}
-                      ｜序號{" "}
-                      {formatSequence(
-                        candidate.join_sequence
-                      )}
-                      ｜
-                      {getGenderLabel(
-                        candidate.gender
-                      )}
-                    </option>
-                  )
-                )}
-              </select>
-
-              {candidates.length === 0 && (
-                <p className="mt-2 text-sm text-neutral-500">
-                  目前沒有符合條件的申請對象。
-                </p>
-              )}
+              <p className="mt-2 text-sm text-neutral-500">
+                序號{" "}
+                {formatSequence(superior.join_sequence)}
+                ・
+                {getGenderLabel(superior.gender)}
+              </p>
             </div>
 
-            <div>
-              <label
-                htmlFor="message"
-                className="mb-2 block text-sm text-neutral-300"
+            <p className="mt-4 text-sm leading-6 text-neutral-400">
+              你目前已有有效歸屬關係，因此無法再次進行系統分配。
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href="/hierarchy"
+                className="rounded-lg bg-neutral-100 px-5 py-3 font-medium text-neutral-950 transition hover:bg-white"
               >
-                附言
-              </label>
+                查看階級關係
+              </Link>
 
-              <textarea
-                id="message"
-                value={message}
-                onChange={(event) =>
-                  setMessage(
-                    event.target.value
-                  )
-                }
-                rows={4}
-                maxLength={500}
-                placeholder="可選填申請理由或說明"
-                className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-neutral-100 outline-none focus:border-neutral-400"
-              />
+              <Link
+                href="/chat"
+                className="rounded-lg border border-neutral-700 px-5 py-3 text-neutral-300 transition hover:border-neutral-500 hover:text-white"
+              >
+                前往主從聊天室
+              </Link>
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+            <p className="text-sm text-neutral-500">
+              SYSTEM ASSIGNMENT
+            </p>
 
-              <p className="mt-1 text-right text-xs text-neutral-600">
-                {message.length}/500
+            <h2 className="mt-2 text-2xl font-semibold">
+              交由系統分配
+            </h2>
+
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-neutral-400">
+              目前沒有上級時，可以申請由系統進行歸屬分配。系統會從符合資格、目前仍接受新從屬者且尚有名額的玩家中隨機選擇一位。
+            </p>
+
+            <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-5">
+              <p className="font-medium">
+                分配規則
               </p>
+
+              <div className="mt-3 space-y-2 text-sm leading-6 text-neutral-500">
+                <p>・不依加入序號前後決定。</p>
+                <p>・管理帳號不會參與一般玩家配對。</p>
+                <p>・只會分配給目前願意接收新從屬者且仍有名額的玩家。</p>
+                <p>・分配成功後立即建立正式歸屬關係。</p>
+              </div>
             </div>
 
             <button
               type="button"
-              onClick={handleCreateRequest}
-              disabled={
-                submitting ||
-                !selectedTargetId ||
-                candidates.length === 0
-              }
-              className="rounded-lg bg-neutral-100 px-5 py-3 font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleRandomAssign}
+              disabled={assigning}
+              className="mt-6 rounded-lg bg-neutral-100 px-6 py-3 font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting
-                ? "正在送出…"
-                : "送出自願歸屬申請"}
+              {assigning
+                ? "系統分配中…"
+                : "申請系統分配"}
             </button>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-medium">
-              收到的申請
-            </h2>
-
-            <span className="text-sm text-neutral-500">
-              {
-                receivedRequests.filter(
-                  (item) =>
-                    item.request.status ===
-                    "pending"
-                ).length
-              }{" "}
-              筆待處理
-            </span>
-          </div>
-
-          {receivedRequests.length === 0 ? (
-            <div className="mt-5 rounded-xl bg-neutral-950 p-5 text-neutral-400">
-              目前沒有收到申請。
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {receivedRequests.map(
-                (item) => (
-                  <article
-                    key={item.request.id}
-                    className="rounded-xl bg-neutral-950 p-5"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-lg font-medium">
-                          {
-                            item.otherProfile
-                              .nickname
-                          }
-                        </p>
-
-                        <p className="mt-2 text-sm text-neutral-500">
-                          序號{" "}
-                          {formatSequence(
-                            item.otherProfile
-                              .join_sequence
-                          )}
-                          ・
-                          {getGenderLabel(
-                            item.otherProfile
-                              .gender
-                          )}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs ${getStatusClass(
-                          item.request.status
-                        )}`}
-                      >
-                        {getStatusLabel(
-                          item.request.status
-                        )}
-                      </span>
-                    </div>
-
-                    {item.request.message && (
-                      <div className="mt-4 rounded-lg border border-neutral-800 p-4 text-sm leading-6 text-neutral-300">
-                        {item.request.message}
-                      </div>
-                    )}
-
-                    <p className="mt-4 text-sm text-neutral-500">
-                      送出時間：
-                      {formatDate(
-                        item.request.created_at
-                      )}
-                    </p>
-
-                    {item.request.status ===
-                      "pending" && (
-                      <div className="mt-5 flex gap-3">
-                        <button
-                          type="button"
-                          disabled={
-                            processingId ===
-                            item.request.id
-                          }
-                          onClick={() =>
-                            handleRespond(
-                              item.request.id,
-                              true
-                            )
-                          }
-                          className="rounded-lg bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {processingId ===
-                          item.request.id
-                            ? "處理中…"
-                            : "接受"}
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={
-                            processingId ===
-                            item.request.id
-                          }
-                          onClick={() =>
-                            handleRespond(
-                              item.request.id,
-                              false
-                            )
-                          }
-                          className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          拒絕
-                        </button>
-                      </div>
-                    )}
-                  </article>
-                )
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-          <h2 className="text-xl font-medium">
-            我送出的申請
-          </h2>
-
-          {sentRequests.length === 0 ? (
-            <div className="mt-5 rounded-xl bg-neutral-950 p-5 text-neutral-400">
-              目前沒有送出的申請。
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {sentRequests.map(
-                (item) => (
-                  <article
-                    key={item.request.id}
-                    className="rounded-xl bg-neutral-950 p-5"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-lg font-medium">
-                          {
-                            item.otherProfile
-                              .nickname
-                          }
-                        </p>
-
-                        <p className="mt-2 text-sm text-neutral-500">
-                          序號{" "}
-                          {formatSequence(
-                            item.otherProfile
-                              .join_sequence
-                          )}
-                          ・
-                          {getGenderLabel(
-                            item.otherProfile
-                              .gender
-                          )}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs ${getStatusClass(
-                          item.request.status
-                        )}`}
-                      >
-                        {getStatusLabel(
-                          item.request.status
-                        )}
-                      </span>
-                    </div>
-
-                    {item.request.message && (
-                      <div className="mt-4 rounded-lg border border-neutral-800 p-4 text-sm leading-6 text-neutral-300">
-                        {item.request.message}
-                      </div>
-                    )}
-
-                    <p className="mt-4 text-sm text-neutral-500">
-                      送出時間：
-                      {formatDate(
-                        item.request.created_at
-                      )}
-                    </p>
-                  </article>
-                )
-              )}
-            </div>
-          )}
-        </section>
       </div>
     </main>
   );
