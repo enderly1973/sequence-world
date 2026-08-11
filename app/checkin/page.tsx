@@ -37,6 +37,13 @@ type MissionResult = {
   completed_count: number;
 };
 
+type TodayWorldCost = {
+  cost_date: string;
+  configured_points: number;
+  deducted_points: number;
+  balance_after: number;
+};
+
 export default function CheckinPage() {
   const router = useRouter();
 
@@ -45,6 +52,9 @@ export default function CheckinPage() {
 
   const [logs, setLogs] =
     useState<CheckinLog[]>([]);
+
+  const [todayWorldCost, setTodayWorldCost] =
+    useState<TodayWorldCost | null>(null);
 
   const [loading, setLoading] =
     useState(true);
@@ -61,6 +71,18 @@ export default function CheckinPage() {
   useEffect(() => {
     void loadPage();
   }, []);
+
+  function getTaipeiDateString() {
+    return new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone: "Asia/Taipei",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }
+    ).format(new Date());
+  }
 
   async function loadPage() {
     setLoading(true);
@@ -81,53 +103,91 @@ export default function CheckinPage() {
         return;
       }
 
+      // 先結算尚未處理的每日世界維持費。
+      // 原本的 settle_daily_world_costs() 會依目前登入玩家 auth.uid() 處理，
+      // 並排除 founder / administrator。
       const {
-        data: profileData,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          nickname,
-          world_points,
-          checkin_streak,
-          last_checkin_date
-        `)
-        .eq("id", user.id)
-        .single();
+        error: settleError,
+      } = await supabase.rpc(
+        "settle_daily_world_costs"
+      );
 
-      if (profileError) {
-        throw profileError;
+      if (settleError) {
+        throw settleError;
+      }
+
+      const today =
+        getTaipeiDateString();
+
+      const [
+        profileResult,
+        logResult,
+        costResult,
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(`
+            id,
+            nickname,
+            world_points,
+            checkin_streak,
+            last_checkin_date
+          `)
+          .eq("id", user.id)
+          .single(),
+
+        supabase
+          .from("daily_checkins")
+          .select(`
+            id,
+            checkin_date,
+            streak,
+            reward_points,
+            created_at
+          `)
+          .eq("player_id", user.id)
+          .order("checkin_date", {
+            ascending: false,
+          })
+          .limit(10),
+
+        supabase
+          .from("daily_world_costs")
+          .select(`
+            cost_date,
+            configured_points,
+            deducted_points,
+            balance_after
+          `)
+          .eq("player_id", user.id)
+          .eq("cost_date", today)
+          .maybeSingle(),
+      ]);
+
+      if (profileResult.error) {
+        throw profileResult.error;
+      }
+
+      if (logResult.error) {
+        throw logResult.error;
+      }
+
+      if (costResult.error) {
+        throw costResult.error;
       }
 
       setProfile(
-        profileData as Profile
+        profileResult.data as Profile
       );
 
-      const {
-        data: logData,
-        error: logError,
-      } = await supabase
-        .from("daily_checkins")
-        .select(`
-          id,
-          checkin_date,
-          streak,
-          reward_points,
-          created_at
-        `)
-        .eq("player_id", user.id)
-        .order("checkin_date", {
-          ascending: false,
-        })
-        .limit(10);
-
-      if (logError) {
-        throw logError;
-      }
-
       setLogs(
-        (logData ?? []) as CheckinLog[]
+        (logResult.data ?? []) as CheckinLog[]
+      );
+
+      setTodayWorldCost(
+        costResult.data
+          ? (costResult.data as TodayWorldCost)
+          : null
       );
     } catch (error) {
       setErrorMessage(
@@ -234,26 +294,9 @@ export default function CheckinPage() {
       return false;
     }
 
-    const formatter =
-      new Intl.DateTimeFormat(
-        "en-CA",
-        {
-          timeZone:
-            "Asia/Taipei",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }
-      );
-
-    const today =
-      formatter.format(
-        new Date()
-      );
-
     return (
       profile.last_checkin_date ===
-      today
+      getTaipeiDateString()
     );
   }
 
@@ -299,7 +342,7 @@ export default function CheckinPage() {
             </h1>
 
             <p className="mt-3 text-neutral-400">
-              每天回到世界，累積連續登入與世界積分。
+              每天回到世界，先結算世界維持費，再完成今日打卡。
             </p>
           </div>
 
@@ -334,7 +377,7 @@ export default function CheckinPage() {
 
         {profile && (
           <>
-            <section className="grid gap-4 sm:grid-cols-2">
+            <section className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
                 <p className="text-sm text-neutral-500">
                   世界積分
@@ -345,6 +388,25 @@ export default function CheckinPage() {
                     profile.world_points
                   }
                 </p>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+                <p className="text-sm text-neutral-500">
+                  今日世界維持費
+                </p>
+
+                <p className="mt-3 text-4xl font-semibold text-red-300">
+                  {todayWorldCost
+                    ? `-${todayWorldCost.deducted_points}`
+                    : "0"}
+                </p>
+
+                {todayWorldCost && (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    設定費用：
+                    {todayWorldCost.configured_points}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
@@ -394,7 +456,7 @@ export default function CheckinPage() {
                   </p>
 
                   <p className="mt-2 text-neutral-400">
-                    完成今日打卡即可獲得世界積分，並完成每日任務。
+                    今日世界維持費已先完成結算，現在可以進行每日打卡。
                   </p>
 
                   <button
@@ -413,6 +475,48 @@ export default function CheckinPage() {
                   </button>
                 </>
               )}
+            </section>
+
+            <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+              <p className="text-sm text-neutral-500">
+                今日世界結算
+              </p>
+
+              <div className="mt-4 space-y-3 rounded-xl bg-neutral-950 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-neutral-400">
+                    世界維持費
+                  </span>
+
+                  <span className="text-red-300">
+                    {todayWorldCost
+                      ? `-${todayWorldCost.deducted_points}`
+                      : "0"}
+                  </span>
+                </div>
+
+                {todayWorldCost && (
+                  <div className="flex items-center justify-between gap-4 border-t border-neutral-800 pt-3">
+                    <span className="text-neutral-500">
+                      維持費結算後餘額
+                    </span>
+
+                    <span>
+                      {todayWorldCost.balance_after}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-4 border-t border-neutral-800 pt-3">
+                  <span className="text-neutral-400">
+                    目前世界積分
+                  </span>
+
+                  <span className="font-semibold">
+                    {profile.world_points}
+                  </span>
+                </div>
+              </div>
             </section>
 
             <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">

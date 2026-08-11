@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 type TaskStatus =
   | "pending"
   | "accepted"
+  | "submitted"
   | "completed"
   | "cancelled";
 
@@ -40,6 +41,8 @@ type FilterType =
   | "all"
   | "pending"
   | "accepted"
+  | "submitted"
+  | "overdue"
   | "completed"
   | "cancelled";
 
@@ -163,12 +166,69 @@ export default function SentTasksPage() {
     }
   }
 
+  function isTaskOverdue(task: TaskRow) {
+    return Boolean(
+      task.due_at &&
+      task.status !== "completed" &&
+      task.status !== "cancelled" &&
+      new Date(task.due_at).getTime() < Date.now()
+    );
+  }
+
   const filteredTasks = useMemo(() => {
+    const sortedTasks = [...tasks].sort(
+      (a, b) => {
+        const aSubmitted =
+          a.task.status === "submitted";
+        const bSubmitted =
+          b.task.status === "submitted";
+
+        if (aSubmitted && !bSubmitted) {
+          return -1;
+        }
+
+        if (!aSubmitted && bSubmitted) {
+          return 1;
+        }
+
+        const aOverdue =
+          isTaskOverdue(a.task);
+        const bOverdue =
+          isTaskOverdue(b.task);
+
+        if (aOverdue && !bOverdue) {
+          return -1;
+        }
+
+        if (!aOverdue && bOverdue) {
+          return 1;
+        }
+
+        return (
+          new Date(
+            b.task.created_at
+          ).getTime() -
+          new Date(
+            a.task.created_at
+          ).getTime()
+        );
+      }
+    );
+
     if (filter === "all") {
-      return tasks;
+      return sortedTasks;
     }
 
-    return tasks.filter(
+    if (filter === "overdue") {
+      return sortedTasks.filter(
+        (item) =>
+          isTaskOverdue(
+            item.task
+          )
+      );
+    }
+
+    return sortedTasks.filter(
       (item) =>
         item.task.status === filter
     );
@@ -205,6 +265,10 @@ export default function SentTasksPage() {
       return "進行中";
     }
 
+    if (status === "submitted") {
+      return "待你確認";
+    }
+
     if (status === "completed") {
       return "已完成";
     }
@@ -223,6 +287,10 @@ export default function SentTasksPage() {
       return "border-blue-900 text-blue-300";
     }
 
+    if (status === "submitted") {
+      return "border-violet-900 text-violet-300";
+    }
+
     if (status === "completed") {
       return "border-emerald-900 text-emerald-300";
     }
@@ -238,6 +306,18 @@ export default function SentTasksPage() {
   const acceptedCount = tasks.filter(
     (item) =>
       item.task.status === "accepted"
+  ).length;
+
+  const submittedCount = tasks.filter(
+    (item) =>
+      item.task.status === "submitted"
+  ).length;
+
+  const overdueCount = tasks.filter(
+    (item) =>
+      isTaskOverdue(
+        item.task
+      )
   ).length;
 
   const completedCount = tasks.filter(
@@ -306,7 +386,7 @@ export default function SentTasksPage() {
           </div>
         )}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-4">
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
             <p className="text-sm text-neutral-500">
               等待接受
@@ -324,6 +404,26 @@ export default function SentTasksPage() {
 
             <p className="mt-2 text-2xl font-semibold">
               {acceptedCount} 件
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-violet-900/60 bg-violet-950/20 p-5">
+            <p className="text-sm text-violet-400">
+              待你確認
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-violet-300">
+              {submittedCount} 件
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-red-900/60 bg-red-950/20 p-5">
+            <p className="text-sm text-red-400">
+              已逾期
+            </p>
+
+            <p className="mt-2 text-2xl font-semibold text-red-300">
+              {overdueCount} 件
             </p>
           </div>
 
@@ -354,6 +454,8 @@ export default function SentTasksPage() {
               ["all", "全部"],
               ["pending", "等待接受"],
               ["accepted", "進行中"],
+              ["submitted", "待你確認"],
+              ["overdue", "已逾期"],
               ["completed", "已完成"],
               ["cancelled", "已取消"],
             ].map(([value, label]) => (
@@ -385,11 +487,21 @@ export default function SentTasksPage() {
           ) : (
             <div className="space-y-4">
               {filteredTasks.map(
-                ({ task, receiver }) => (
+                ({ task, receiver }) => {
+                  const overdue =
+                    isTaskOverdue(task);
+
+                  return (
                   <Link
                     key={task.id}
                     href={`/tasks/${task.id}`}
-                    className="block rounded-xl bg-neutral-950 p-5 transition hover:bg-neutral-800"
+                    className={`block rounded-xl border p-5 transition ${
+                      task.status === "submitted"
+                        ? "border-violet-900/60 bg-violet-950/10 hover:border-violet-700"
+                        : overdue
+                          ? "border-red-900/60 bg-red-950/10 hover:border-red-700"
+                          : "border-neutral-800 bg-neutral-950 hover:bg-neutral-800"
+                    }`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
@@ -408,13 +520,19 @@ export default function SentTasksPage() {
                       </div>
 
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs ${getStatusClass(
-                          task.status
-                        )}`}
+                        className={`rounded-full border px-3 py-1 text-xs ${
+                          overdue
+                            ? "border-red-900 text-red-300"
+                            : getStatusClass(
+                                task.status
+                              )
+                        }`}
                       >
-                        {getStatusLabel(
-                          task.status
-                        )}
+                        {overdue
+                          ? "已逾期"
+                          : getStatusLabel(
+                              task.status
+                            )}
                       </span>
                     </div>
 
@@ -430,13 +548,21 @@ export default function SentTasksPage() {
                         )}
                       </span>
 
-                      <span>
+                      <span
+                        className={
+                          overdue
+                            ? "font-medium text-red-400"
+                            : undefined
+                        }
+                      >
                         期限：
                         {task.due_at
                           ? formatDate(
                               task.due_at
                             )
                           : "無期限"}
+                        {overdue &&
+                          "（已逾期）"}
                       </span>
 
                       {task.accepted_at && (
@@ -458,7 +584,8 @@ export default function SentTasksPage() {
                       )}
                     </div>
                   </Link>
-                )
+                  );
+                }
               )}
             </div>
           )}

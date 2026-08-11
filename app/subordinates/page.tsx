@@ -42,6 +42,8 @@ type Subordinate = {
     | "system";
 
   relation_created_at: string;
+
+  chat_room_id: string | null;
 };
 
 type RelationRow = {
@@ -359,6 +361,50 @@ export default function SubordinatesPage() {
         throw subordinateProfilesError;
       }
 
+      const {
+        data:
+          chatRoomData,
+        error:
+          chatRoomError,
+      } =
+        await supabase
+          .from(
+            "master_slave_chat_rooms"
+          )
+          .select(`
+            id,
+            slave_id
+          `)
+          .eq(
+            "master_id",
+            user.id
+          )
+          .in(
+            "slave_id",
+            subordinateIds
+          );
+
+      if (
+        chatRoomError
+      ) {
+        throw chatRoomError;
+      }
+
+      const chatRoomMap =
+        new Map(
+          (
+            chatRoomData ??
+            []
+          ).map(
+            (
+              room
+            ) => [
+              room.slave_id,
+              room.id,
+            ]
+          )
+        );
+
       const profileMap =
         new Map(
           (
@@ -410,6 +456,11 @@ export default function SubordinatesPage() {
 
                 relation_created_at:
                   relation.created_at,
+
+                chat_room_id:
+                  chatRoomMap.get(
+                    member.id
+                  ) ?? null,
               };
             }
           )
@@ -1000,6 +1051,19 @@ export default function SubordinatesPage() {
                           >
                             查看個人頁
                           </Link>
+
+                          {subordinate.chat_room_id ? (
+                            <Link
+                              href={`/chat/${subordinate.chat_room_id}`}
+                              className="rounded-lg border border-sky-900 px-4 py-2 text-sm text-sky-300 transition hover:border-sky-700 hover:bg-sky-950/20"
+                            >
+                              主從聊天室
+                            </Link>
+                          ) : (
+                            <span className="cursor-not-allowed rounded-lg border border-neutral-800 px-4 py-2 text-sm text-neutral-600">
+                              尚無聊天室
+                            </span>
+                          )}
 
                           {canSendTask ? (
 

@@ -30,6 +30,7 @@ type SuperiorInfo = {
   profile: ProfileSummary;
   relationType: RelationRow["relation_type"];
   createdAt: string;
+  chatRoomId: string | null;
 } | null;
 
 type SubordinateInfo = {
@@ -129,11 +130,30 @@ export default function HierarchyPage() {
           throw superiorProfileError;
         }
 
+        const {
+          data: chatRoomData,
+          error: chatRoomError,
+        } = await supabase
+          .from("master_slave_chat_rooms")
+          .select("id")
+          .eq("master_id", superiorRelation.superior_id)
+          .eq("slave_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(1)
+          .maybeSingle();
+
+        if (chatRoomError) {
+          throw chatRoomError;
+        }
+
         setSuperior({
           relationId: superiorRelation.id,
           profile: superiorProfile as ProfileSummary,
           relationType: superiorRelation.relation_type,
           createdAt: superiorRelation.created_at,
+          chatRoomId: chatRoomData?.id ?? null,
         });
       } else {
         setSuperior(null);
@@ -402,7 +422,34 @@ export default function HierarchyPage() {
                 {formatDate(superior.createdAt)}
               </p>
 
-              <div className="mt-5 border-t border-neutral-800 pt-4">
+              <div className="mt-5 flex flex-wrap gap-3 border-t border-neutral-800 pt-4">
+                <Link
+                  href={`/members/${superior.profile.id}`}
+                  className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
+                >
+                  查看上級
+                </Link>
+
+                {superior.chatRoomId ? (
+                  <Link
+                    href={`/chat/${superior.chatRoomId}`}
+                    className="rounded-lg border border-sky-900 px-4 py-2 text-sm text-sky-300 transition hover:border-sky-700 hover:bg-sky-950/20"
+                  >
+                    主從聊天室
+                  </Link>
+                ) : (
+                  <span className="cursor-not-allowed rounded-lg border border-neutral-800 px-4 py-2 text-sm text-neutral-600">
+                    尚無聊天室
+                  </span>
+                )}
+
+                <Link
+                  href="/tasks"
+                  className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
+                >
+                  我的任務
+                </Link>
+
                 <button
                   type="button"
                   disabled={leaving}

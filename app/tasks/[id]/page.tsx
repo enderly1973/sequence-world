@@ -293,6 +293,14 @@ export default function TaskDetailPage() {
   const isSender =
     task?.sender_id === currentUserId;
 
+  const isOverdue =
+    Boolean(
+      task?.due_at &&
+      task.status !== "completed" &&
+      task.status !== "cancelled" &&
+      new Date(task.due_at).getTime() < Date.now()
+    );
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-neutral-400">
@@ -370,11 +378,15 @@ export default function TaskDetailPage() {
                 </div>
 
                 <span
-                  className={`rounded-full border px-3 py-1 text-sm ${getStatusClass(
-                    task.status
-                  )}`}
+                  className={`rounded-full border px-3 py-1 text-sm ${
+                    isOverdue
+                      ? "border-red-900 text-red-300"
+                      : getStatusClass(task.status)
+                  }`}
                 >
-                  {getStatusLabel(task.status)}
+                  {isOverdue
+                    ? "已逾期"
+                    : getStatusLabel(task.status)}
                 </span>
               </div>
 
@@ -490,6 +502,18 @@ export default function TaskDetailPage() {
                 )}
               </div>
             </section>
+
+            {isOverdue && (
+              <section className="mt-6 rounded-2xl border border-red-900/60 bg-red-950/20 p-6">
+                <p className="text-sm font-medium text-red-400">
+                  任務已逾期
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  此任務已超過完成期限，但仍可繼續接受、提交與確認完成。
+                </p>
+              </section>
+            )}
 
             {isReceiver &&
               task.status === "pending" && (

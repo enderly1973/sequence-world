@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 type TaskStatus =
   | "pending"
   | "accepted"
+  | "submitted"
   | "completed"
   | "cancelled";
 
@@ -35,6 +36,8 @@ type FilterType =
   | "all"
   | "pending"
   | "accepted"
+  | "submitted"
+  | "overdue"
   | "completed";
 
 export default function TasksPage() {
@@ -187,13 +190,48 @@ export default function TasksPage() {
     }
   }
 
+  function isTaskOverdue(task: Task) {
+    return Boolean(
+      task.due_at &&
+      task.status !== "completed" &&
+      task.status !== "cancelled" &&
+      new Date(task.due_at).getTime() < Date.now()
+    );
+  }
+
   const filteredTasks =
     useMemo(() => {
+      const sortedTasks = [...tasks].sort(
+        (a, b) => {
+          const aOverdue = isTaskOverdue(a);
+          const bOverdue = isTaskOverdue(b);
+
+          if (aOverdue && !bOverdue) {
+            return -1;
+          }
+
+          if (!aOverdue && bOverdue) {
+            return 1;
+          }
+
+          return (
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+          );
+        }
+      );
+
       if (filter === "all") {
-        return tasks;
+        return sortedTasks;
       }
 
-      return tasks.filter(
+      if (filter === "overdue") {
+        return sortedTasks.filter(
+          (task) => isTaskOverdue(task)
+        );
+      }
+
+      return sortedTasks.filter(
         (task) =>
           task.status === filter
       );
@@ -211,6 +249,17 @@ export default function TasksPage() {
         (task) =>
           task.status ===
           "accepted"
+      ).length,
+
+      submitted: tasks.filter(
+        (task) =>
+          task.status ===
+          "submitted"
+      ).length,
+
+      overdue: tasks.filter(
+        (task) =>
+          isTaskOverdue(task)
       ).length,
 
       completed: tasks.filter(
@@ -271,6 +320,10 @@ export default function TasksPage() {
       return "進行中";
     }
 
+    if (status === "submitted") {
+      return "等待上級確認";
+    }
+
     if (status === "completed") {
       return "已完成";
     }
@@ -287,6 +340,10 @@ export default function TasksPage() {
 
     if (status === "accepted") {
       return "border-blue-900/60 bg-blue-950/20 text-blue-300";
+    }
+
+    if (status === "submitted") {
+      return "border-violet-900/60 bg-violet-950/20 text-violet-300";
     }
 
     if (status === "completed") {
@@ -353,7 +410,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-3">
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
             <p className="text-sm text-neutral-500">
               待接受
@@ -374,6 +431,26 @@ export default function TasksPage() {
             </p>
           </div>
 
+          <div className="rounded-2xl border border-violet-900/60 bg-violet-950/20 p-5">
+            <p className="text-sm text-violet-400">
+              待上級確認
+            </p>
+
+            <p className="mt-2 text-3xl font-semibold text-violet-300">
+              {counts.submitted}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-red-900/60 bg-red-950/20 p-5">
+            <p className="text-sm text-red-400">
+              已逾期
+            </p>
+
+            <p className="mt-2 text-3xl font-semibold text-red-300">
+              {counts.overdue}
+            </p>
+          </div>
+
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
             <p className="text-sm text-neutral-500">
               已完成
@@ -391,6 +468,8 @@ export default function TasksPage() {
               ["all", "全部"],
               ["pending", "待接受"],
               ["accepted", "進行中"],
+              ["submitted", "待上級確認"],
+              ["overdue", "已逾期"],
               ["completed", "已完成"],
             ].map(
               ([value, label]) => (
@@ -429,11 +508,18 @@ export default function TasksPage() {
                       task.sender_id
                     );
 
+                  const overdue =
+                    isTaskOverdue(task);
+
                   return (
                     <Link
                       key={task.id}
                       href={`/tasks/${task.id}`}
-                      className="block rounded-xl border border-neutral-800 bg-neutral-950 p-5 transition hover:border-neutral-600 hover:bg-neutral-900"
+                      className={`block rounded-xl border p-5 transition ${
+                        overdue
+                          ? "border-red-900/60 bg-red-950/10 hover:border-red-700"
+                          : "border-neutral-800 bg-neutral-950 hover:border-neutral-600 hover:bg-neutral-900"
+                      }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-5">
                         <div className="min-w-0 flex-1">
@@ -470,24 +556,38 @@ export default function TasksPage() {
                             </span>
 
                             {task.due_at && (
-                              <span>
+                              <span
+                                className={
+                                  overdue
+                                    ? "font-medium text-red-400"
+                                    : undefined
+                                }
+                              >
                                 截止：
                                 {formatDate(
                                   task.due_at
                                 )}
+                                {overdue &&
+                                  "（已逾期）"}
                               </span>
                             )}
                           </div>
                         </div>
 
                         <span
-                          className={`rounded-full border px-3 py-1 text-xs ${getStatusClass(
-                            task.status
-                          )}`}
+                          className={`rounded-full border px-3 py-1 text-xs ${
+                            overdue
+                              ? "border-red-900/60 bg-red-950/20 text-red-300"
+                              : getStatusClass(
+                                  task.status
+                                )
+                          }`}
                         >
-                          {getStatusLabel(
-                            task.status
-                          )}
+                          {overdue
+                            ? "已逾期"
+                            : getStatusLabel(
+                                task.status
+                              )}
                         </span>
                       </div>
                     </Link>
