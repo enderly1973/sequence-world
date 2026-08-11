@@ -626,6 +626,12 @@ export default function AdminPage() {
             />
 
             <AdminCard
+              href="/admin/chats"
+              title="聊天室監督"
+              text="查看世界中所有主從聊天室與對話紀錄。"
+            />
+
+            <AdminCard
               href="/admin/settings"
               title="世界設定"
               text="調整每日獎勵、競技積分與階級參數。"
