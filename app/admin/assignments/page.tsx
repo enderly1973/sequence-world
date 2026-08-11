@@ -20,12 +20,19 @@ type AssignmentRecord = RelationRow & {
   subordinate_name: string;
 };
 
+type FilterType =
+  | "all"
+  | "active"
+  | "ended"
+  | "system";
+
 export default function AdminAssignmentsPage() {
   const router = useRouter();
 
   const [records, setRecords] = useState<AssignmentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [filter, setFilter] = useState<FilterType>("all");
 
   useEffect(() => {
     void loadRecords();
@@ -45,7 +52,6 @@ export default function AdminAssignmentsPage() {
         return;
       }
 
-      // 確認管理者
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role, status")
@@ -64,7 +70,6 @@ export default function AdminAssignmentsPage() {
         return;
       }
 
-      // 讀取所有主從關係紀錄
       const { data: relationData, error: relationError } = await supabase
         .from("hierarchy_relations")
         .select(`
@@ -159,6 +164,58 @@ export default function AdminAssignmentsPage() {
     return type;
   }
 
+  const filteredRecords = records.filter((record) => {
+    if (filter === "active") {
+      return record.status === "active";
+    }
+
+    if (filter === "ended") {
+      return record.status === "ended";
+    }
+
+    if (filter === "system") {
+      return record.relation_type === "system";
+    }
+
+    return true;
+  });
+
+  const filters: Array<{
+    value: FilterType;
+    label: string;
+  }> = [
+    {
+      value: "all",
+      label: "全部",
+    },
+    {
+      value: "active",
+      label: "有效",
+    },
+    {
+      value: "ended",
+      label: "已解除",
+    },
+    {
+      value: "system",
+      label: "系統分配",
+    },
+  ];
+
+  const totalCount = records.length;
+
+  const activeCount = records.filter(
+    (record) => record.status === "active"
+  ).length;
+
+  const endedCount = records.filter(
+    (record) => record.status === "ended"
+  ).length;
+
+  const systemCount = records.filter(
+    (record) => record.relation_type === "system"
+  ).length;
+
   return (
     <main
       style={{
@@ -221,6 +278,144 @@ export default function AdminAssignmentsPage() {
           </p>
         </div>
 
+        {!loading && !error && records.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
+              marginBottom: 24,
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid #292929",
+                background: "#111",
+                borderRadius: 12,
+                padding: 18,
+              }}
+            >
+              <div style={{ color: "#777", fontSize: 13 }}>
+                全部紀錄
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 28,
+                  fontWeight: 700,
+                }}
+              >
+                {totalCount}
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #064e3b",
+                background: "#071711",
+                borderRadius: 12,
+                padding: 18,
+              }}
+            >
+              <div style={{ color: "#6ee7b7", fontSize: 13 }}>
+                目前有效
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 28,
+                  fontWeight: 700,
+                  color: "#34d399",
+                }}
+              >
+                {activeCount}
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #3f3f46",
+                background: "#111",
+                borderRadius: 12,
+                padding: 18,
+              }}
+            >
+              <div style={{ color: "#a1a1aa", fontSize: 13 }}>
+                已解除
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 28,
+                  fontWeight: 700,
+                }}
+              >
+                {endedCount}
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #4c1d95",
+                background: "#120a1f",
+                borderRadius: 12,
+                padding: 18,
+              }}
+            >
+              <div style={{ color: "#c4b5fd", fontSize: 13 }}>
+                系統分配
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 28,
+                  fontWeight: 700,
+                  color: "#c4b5fd",
+                }}
+              >
+                {systemCount}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && records.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              marginBottom: 24,
+            }}
+          >
+            {filters.map((item) => (
+              <button
+                key={item.value}
+                onClick={() => setFilter(item.value)}
+                style={{
+                  border:
+                    filter === item.value
+                      ? "1px solid #ef4444"
+                      : "1px solid #333",
+                  background:
+                    filter === item.value
+                      ? "#2a1010"
+                      : "#111",
+                  color:
+                    filter === item.value
+                      ? "#f87171"
+                      : "#aaa",
+                  borderRadius: 8,
+                  padding: "9px 14px",
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading && (
           <div style={{ color: "#777" }}>
             載入紀錄中...
@@ -256,13 +451,31 @@ export default function AdminAssignmentsPage() {
           </div>
         )}
 
+        {!loading &&
+          !error &&
+          records.length > 0 &&
+          filteredRecords.length === 0 && (
+            <div
+              style={{
+                padding: 30,
+                border: "1px solid #292929",
+                background: "#111",
+                borderRadius: 12,
+                color: "#777",
+                textAlign: "center",
+              }}
+            >
+              此篩選條件目前沒有紀錄。
+            </div>
+          )}
+
         <div
           style={{
             display: "grid",
             gap: 14,
           }}
         >
-          {records.map((record) => (
+          {filteredRecords.map((record) => (
             <div
               key={record.id}
               style={{
@@ -288,6 +501,7 @@ export default function AdminAssignmentsPage() {
                     }}
                   >
                     {record.subordinate_name}
+
                     <span
                       style={{
                         color: "#666",
@@ -296,6 +510,7 @@ export default function AdminAssignmentsPage() {
                     >
                       →
                     </span>
+
                     {record.superior_name}
                   </div>
 
