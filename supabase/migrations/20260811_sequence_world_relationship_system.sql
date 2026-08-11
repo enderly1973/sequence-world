@@ -97,7 +97,7 @@ to authenticated;
 
 
 -- =========================================================
--- 3. 系統隨機分配上級
+-- 3. 系統分配上級
 --
 -- 規則：
 -- - 排除自己
@@ -107,6 +107,8 @@ to authenticated;
 -- - 對方必須還有 subordinate_limit 名額
 -- - 不會把自己的 active 直屬者配成自己的上級
 -- - 下一次分配會避開最近一任 ended 上級
+-- - 優先分配給目前 active 直屬者較少的人
+-- - 若人數相同，再隨機選擇
 -- =========================================================
 
 create or replace function random_assign_superior()
@@ -139,7 +141,7 @@ begin
     raise exception '管理帳號不能使用系統配對';
   end if;
 
-  -- 已經有上級就不能再次配對
+  -- 已有 active 上級就不能再次分配
   if exists (
     select 1
     from hierarchy_relations
@@ -158,51 +160,64 @@ begin
   order by created_at desc
   limit 1;
 
-  -- 隨機選擇符合資格的上級
-  select p.id
+  -- 優先選擇目前 active 直屬者最少的人
+  select candidate.id
   into v_superior_id
-  from profiles p
-  where p.id <> v_user_id
+  from (
+    select
+      p.id,
+      count(hr.id) as current_subordinates
+    from profiles p
 
-    and p.status = 'active'
+    left join hierarchy_relations hr
+      on hr.superior_id = p.id
+      and hr.status = 'active'
 
-    -- 排除管理帳號
-    and coalesce(
-      p.role::text,
-      ''
-    ) not in (
-      'founder',
-      'administrator'
-    )
+    where p.id <> v_user_id
 
-    -- 排除最近一任上級
-    and (
-      v_last_superior_id is null
-      or p.id <> v_last_superior_id
-    )
+      and p.status = 'active'
 
-    -- 必須願意接收新從屬者
-    and p.accepting_subordinates = true
+      -- 排除管理帳號
+      and coalesce(
+        p.role::text,
+        ''
+      ) not in (
+        'founder',
+        'administrator'
+      )
 
-    -- 必須還有名額
-    and (
-      select count(*)
-      from hierarchy_relations hr
-      where hr.superior_id = p.id
-        and hr.status = 'active'
-    ) < p.subordinate_limit
+      -- 排除最近一任已解除上級
+      and (
+        v_last_superior_id is null
+        or p.id <> v_last_superior_id
+      )
 
-    -- 不能把自己的 active 直屬者變成自己的上級
-    and not exists (
-      select 1
-      from hierarchy_relations hr
-      where hr.superior_id = v_user_id
-        and hr.subordinate_id = p.id
-        and hr.status = 'active'
-    )
+      -- 必須願意接收新從屬者
+      and p.accepting_subordinates = true
 
-  order by random()
-  limit 1;
+      -- 不能把自己的 active 直屬者變成自己的上級
+      and not exists (
+        select 1
+        from hierarchy_relations own_hr
+        where own_hr.superior_id = v_user_id
+          and own_hr.subordinate_id = p.id
+          and own_hr.status = 'active'
+      )
+
+    group by
+      p.id,
+      p.subordinate_limit
+
+    -- 必須還有接收名額
+    having
+      count(hr.id) < p.subordinate_limit
+
+    order by
+      count(hr.id) asc,
+      random()
+
+    limit 1
+  ) candidate;
 
   if v_superior_id is null then
     raise exception '目前沒有符合條件的可分配對象';
