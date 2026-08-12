@@ -326,6 +326,51 @@ export default function TaskDetailPage() {
     }
   }
 
+  async function handleCancelTask() {
+    if (!task || updating) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      task.status === "accepted"
+        ? "確定要取消這個任務嗎？\n\n接收者已經接受任務。取消後，此任務將立即結束，無法再提交完成。"
+        : "確定要取消這個任務嗎？\n\n取消後，此任務將立即結束。"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdating(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "cancel_task",
+        {
+          p_task_id: task.id,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage("任務已取消。");
+
+      await loadTask();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "取消任務時發生錯誤。"
+      );
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   async function handleSubmitTask() {
     if (!task || updating) {
       return;
@@ -1098,6 +1143,20 @@ export default function TaskDetailPage() {
                     </span>
                   </div>
                 )}
+
+                {task.cancelled_at && (
+                  <div className="flex flex-wrap justify-between gap-4">
+                    <span className="text-neutral-400">
+                      取消時間
+                    </span>
+
+                    <span>
+                      {formatDate(
+                        task.cancelled_at
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -1222,12 +1281,27 @@ export default function TaskDetailPage() {
               task.status === "pending" && (
                 <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
                   <p className="text-sm text-neutral-500">
-                    接收狀態
+                    任務管理
                   </p>
 
-                  <p className="mt-2 text-neutral-300">
-                    正在等待從屬者接受此任務。
+                  <h3 className="mt-2 text-xl font-medium">
+                    等待接收者接受
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-neutral-400">
+                    正在等待從屬者接受此任務。在對方接受前，你可以取消任務。
                   </p>
+
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={handleCancelTask}
+                    className="mt-5 rounded-lg border border-red-900 px-5 py-3 text-sm font-medium text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updating
+                      ? "處理中…"
+                      : "取消任務"}
+                  </button>
                 </section>
               )}
 
@@ -1235,12 +1309,27 @@ export default function TaskDetailPage() {
               task.status === "accepted" && (
                 <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
                   <p className="text-sm text-neutral-500">
-                    接收狀態
+                    任務管理
                   </p>
 
-                  <p className="mt-2 text-neutral-300">
-                    從屬者已接受任務，目前正在進行中。
+                  <h3 className="mt-2 text-xl font-medium">
+                    任務進行中
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-neutral-400">
+                    從屬者已接受任務，目前正在進行中。在對方提交完成前，你仍可取消任務。
                   </p>
+
+                  <button
+                    type="button"
+                    disabled={updating}
+                    onClick={handleCancelTask}
+                    className="mt-5 rounded-lg border border-red-900 px-5 py-3 text-sm font-medium text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updating
+                      ? "處理中…"
+                      : "取消任務"}
+                  </button>
                 </section>
               )}
 
@@ -1334,7 +1423,9 @@ export default function TaskDetailPage() {
                 </p>
 
                 <p className="mt-2 text-neutral-300">
-                  此任務已取消，不再進行後續流程。
+                  {isSender
+                    ? "你已取消此任務，不再進行後續流程。"
+                    : "此任務已由發送者取消，不再進行後續流程。"}
                 </p>
               </section>
             )}
