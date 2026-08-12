@@ -61,6 +61,13 @@ type PendingActions = {
   pending_competitions: number;
 };
 
+type TaskReminderSummary = {
+  received_pending: number;
+  received_accepted: number;
+  received_submitted: number;
+  sent_submitted: number;
+};
+
 type RecentNotification = {
   id: string;
   notification_type: string;
@@ -167,6 +174,16 @@ export default function DashboardPage() {
     pending_tasks: 0,
     pending_relation_requests: 0,
     pending_competitions: 0,
+  });
+
+  const [
+    taskReminderSummary,
+    setTaskReminderSummary,
+  ] = useState<TaskReminderSummary>({
+    received_pending: 0,
+    received_accepted: 0,
+    received_submitted: 0,
+    sent_submitted: 0,
   });
 
   const [
@@ -279,7 +296,28 @@ export default function DashboardPage() {
               return;
             }
 
-            await loadPendingActions();
+            await Promise.all([
+              loadPendingActions(),
+              loadTaskReminderSummary(user.id),
+            ]);
+          }
+        )
+
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "tasks",
+            filter:
+              `sender_id=eq.${user.id}`,
+          },
+          async () => {
+            if (!active) {
+              return;
+            }
+
+            await loadTaskReminderSummary(user.id);
           }
         )
 
@@ -795,6 +833,50 @@ export default function DashboardPage() {
     );
   }
 
+  async function loadTaskReminderSummary(userId: string) {
+    const [receivedResult, sentResult] = await Promise.all([
+      supabase
+        .from("tasks")
+        .select("status")
+        .eq("receiver_id", userId)
+        .in("status", ["pending", "accepted", "submitted"]),
+
+      supabase
+        .from("tasks")
+        .select("status")
+        .eq("sender_id", userId)
+        .eq("status", "submitted"),
+    ]);
+
+    if (receivedResult.error) {
+      console.error("讀取收到任務提醒失敗:", receivedResult.error);
+      return;
+    }
+
+    if (sentResult.error) {
+      console.error("讀取待確認任務提醒失敗:", sentResult.error);
+      return;
+    }
+
+    const received = receivedResult.data ?? [];
+
+    setTaskReminderSummary({
+      received_pending: received.filter(
+        (task) => task.status === "pending"
+      ).length,
+
+      received_accepted: received.filter(
+        (task) => task.status === "accepted"
+      ).length,
+
+      received_submitted: received.filter(
+        (task) => task.status === "submitted"
+      ).length,
+
+      sent_submitted: (sentResult.data ?? []).length,
+    });
+  }
+
   async function loadPendingActions() {
     const {
       data,
@@ -1182,6 +1264,9 @@ export default function DashboardPage() {
           userId
         ),
         loadPendingActions(),
+        loadTaskReminderSummary(
+          userId
+        ),
         loadRecentNotifications(
           userId
         ),
@@ -1395,6 +1480,16 @@ export default function DashboardPage() {
       .pending_relation_requests +
     pendingActions
       .pending_competitions;
+
+
+  const receivedOpenTaskCount =
+    taskReminderSummary.received_pending +
+    taskReminderSummary.received_accepted +
+    taskReminderSummary.received_submitted;
+
+  const hasTaskReminder =
+    receivedOpenTaskCount > 0 ||
+    taskReminderSummary.sent_submitted > 0;
 
   function formatSequence(
     sequence: number
@@ -1657,6 +1752,89 @@ export default function DashboardPage() {
               errorMessage
             }
           </div>
+        )}
+
+        {profile &&
+          hasTaskReminder && (
+          <section className="mb-6 rounded-2xl border border-violet-900/60 bg-violet-950/10 p-6">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div>
+                <p className="text-sm font-medium text-violet-400">
+                  TASK REMINDER
+                </p>
+
+                <h2 className="mt-2 text-2xl font-semibold">
+                  任務提醒
+                </h2>
+
+                <p className="mt-2 text-sm text-neutral-400">
+                  你目前有需要處理或追蹤的主從任務。
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {receivedOpenTaskCount > 0 && (
+                  <Link
+                    href="/tasks"
+                    className="rounded-lg border border-violet-800 px-4 py-2 text-sm text-violet-300 transition hover:border-violet-600"
+                  >
+                    查看我的任務
+                  </Link>
+                )}
+
+                {taskReminderSummary.sent_submitted > 0 && (
+                  <Link
+                    href="/tasks/sent"
+                    className="rounded-lg bg-violet-100 px-4 py-2 text-sm font-medium text-violet-950 transition hover:bg-white"
+                  >
+                    前往確認任務
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+                <p className="text-xs text-neutral-500">
+                  待接受
+                </p>
+
+                <p className="mt-2 text-2xl font-semibold">
+                  {taskReminderSummary.received_pending}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-blue-900/50 bg-blue-950/10 p-4">
+                <p className="text-xs text-blue-400">
+                  進行中
+                </p>
+
+                <p className="mt-2 text-2xl font-semibold text-blue-300">
+                  {taskReminderSummary.received_accepted}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+                <p className="text-xs text-neutral-500">
+                  我已提交
+                </p>
+
+                <p className="mt-2 text-2xl font-semibold">
+                  {taskReminderSummary.received_submitted}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-violet-900/50 bg-violet-950/20 p-4">
+                <p className="text-xs text-violet-400">
+                  等待我確認
+                </p>
+
+                <p className="mt-2 text-2xl font-semibold text-violet-300">
+                  {taskReminderSummary.sent_submitted}
+                </p>
+              </div>
+            </div>
+          </section>
         )}
 
         {profile && (

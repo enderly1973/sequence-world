@@ -372,11 +372,11 @@ export default function TasksPage() {
             </p>
 
             <h1 className="mt-3 text-3xl font-semibold">
-              我的任務
+              任務區
             </h1>
 
             <p className="mt-3 text-neutral-400">
-              查看收到的任務與目前完成狀態。
+              處理收到的任務、追蹤提交狀態與完成紀錄。
             </p>
           </div>
 
@@ -410,59 +410,156 @@ export default function TasksPage() {
           </div>
         )}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+        <section className="mb-6">
+          <div className="mb-4">
             <p className="text-sm text-neutral-500">
-              待接受
+              任務區總覽
             </p>
 
-            <p className="mt-2 text-3xl font-semibold">
-              {counts.pending}
-            </p>
+            <h2 className="mt-2 text-2xl font-semibold">
+              現在需要處理的任務
+            </h2>
           </div>
 
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-            <p className="text-sm text-neutral-500">
-              進行中
-            </p>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <button
+              type="button"
+              onClick={() =>
+                setFilter(
+                  counts.pending > 0
+                    ? "pending"
+                    : "accepted"
+                )
+              }
+              className="rounded-2xl border border-amber-900/50 bg-amber-950/10 p-5 text-left transition hover:border-amber-700"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-amber-400">
+                    需要我處理
+                  </p>
 
-            <p className="mt-2 text-3xl font-semibold">
-              {counts.accepted}
-            </p>
+                  <p className="mt-2 text-3xl font-semibold">
+                    {counts.pending +
+                      counts.accepted}
+                  </p>
+                </div>
+
+                <span className="rounded-full border border-amber-900/60 px-3 py-1 text-xs text-amber-300">
+                  待辦
+                </span>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-xl bg-neutral-950/70 p-3">
+                  <p className="text-neutral-500">
+                    待接受
+                  </p>
+                  <p className="mt-1 text-lg text-neutral-100">
+                    {counts.pending}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-neutral-950/70 p-3">
+                  <p className="text-neutral-500">
+                    進行中
+                  </p>
+                  <p className="mt-1 text-lg text-neutral-100">
+                    {counts.accepted}
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFilter("submitted")
+              }
+              className="rounded-2xl border border-violet-900/60 bg-violet-950/15 p-5 text-left transition hover:border-violet-700"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-violet-400">
+                    我已提交
+                  </p>
+
+                  <p className="mt-2 text-3xl font-semibold text-violet-200">
+                    {counts.submitted}
+                  </p>
+                </div>
+
+                <span className="rounded-full border border-violet-900/60 px-3 py-1 text-xs text-violet-300">
+                  等待確認
+                </span>
+              </div>
+
+              <p className="mt-5 text-sm leading-6 text-neutral-400">
+                已提交完成，等待上級確認的任務。
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFilter("completed")
+              }
+              className="rounded-2xl border border-emerald-900/50 bg-emerald-950/10 p-5 text-left transition hover:border-emerald-700"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-emerald-400">
+                    已完成
+                  </p>
+
+                  <p className="mt-2 text-3xl font-semibold text-emerald-200">
+                    {counts.completed}
+                  </p>
+                </div>
+
+                <span className="rounded-full border border-emerald-900/60 px-3 py-1 text-xs text-emerald-300">
+                  完成
+                </span>
+              </div>
+
+              <p className="mt-5 text-sm leading-6 text-neutral-400">
+                已經由上級確認完成的任務紀錄。
+              </p>
+            </button>
           </div>
 
-          <div className="rounded-2xl border border-violet-900/60 bg-violet-950/20 p-5">
-            <p className="text-sm text-violet-400">
-              待上級確認
-            </p>
+          {counts.overdue > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                setFilter("overdue")
+              }
+              className="mt-4 flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-900/60 bg-red-950/20 p-4 text-left transition hover:border-red-700"
+            >
+              <div>
+                <p className="font-medium text-red-300">
+                  有 {counts.overdue} 件任務已逾期
+                </p>
 
-            <p className="mt-2 text-3xl font-semibold text-violet-300">
-              {counts.submitted}
-            </p>
-          </div>
+                <p className="mt-1 text-sm text-red-400/80">
+                  點此直接查看逾期任務。
+                </p>
+              </div>
 
-          <div className="rounded-2xl border border-red-900/60 bg-red-950/20 p-5">
-            <p className="text-sm text-red-400">
-              已逾期
-            </p>
-
-            <p className="mt-2 text-3xl font-semibold text-red-300">
-              {counts.overdue}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-            <p className="text-sm text-neutral-500">
-              已完成
-            </p>
-
-            <p className="mt-2 text-3xl font-semibold">
-              {counts.completed}
-            </p>
-          </div>
+              <span className="rounded-lg border border-red-800 px-3 py-1 text-sm text-red-300">
+                查看逾期
+              </span>
+            </button>
+          )}
         </section>
 
         <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+          <div className="mb-3">
+            <p className="text-sm text-neutral-500">
+              任務篩選
+            </p>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {[
               ["all", "全部"],
