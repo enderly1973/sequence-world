@@ -263,7 +263,7 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded-lg bg-neutral-100 px-4 py-3 font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "正在建立身分…" : "建立帳號並進入世界"}
+            {loading ? "正在建立帳號…" : "建立帳號"}
           </button>
 
           <p className="text-center text-sm text-neutral-500">
