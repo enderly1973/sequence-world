@@ -632,10 +632,16 @@ export default function AdminPage() {
             />
 
             <AdminCard
-  href="/admin/assignments"
-  title="歸屬分配紀錄"
-  text="查看主從關係的系統分配、建立與解除歷程。"
-/>
+              href="/admin/tasks"
+              title="任務管理"
+              text="查看所有玩家任務、任務狀態與照片／影片證明。"
+            />
+
+            <AdminCard
+              href="/admin/assignments"
+              title="歸屬分配紀錄"
+              text="查看主從關係的系統分配、建立與解除歷程。"
+            />
 
             <AdminCard
               href="/admin/settings"
