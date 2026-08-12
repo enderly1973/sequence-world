@@ -7,8 +7,10 @@ import { supabase } from "@/lib/supabase";
 
 type TaskStatus =
   | "pending"
+  | "rejected"
   | "accepted"
   | "submitted"
+  | "failed"
   | "completed"
   | "cancelled";
 
@@ -281,6 +283,49 @@ export default function TaskDetailPage() {
     }
   }
 
+  async function handleRejectTask() {
+    if (!task || updating) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "確定要拒絕這個任務嗎？\n\n拒絕後，此任務將不會進入進行中狀態。"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdating(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "reject_task",
+        {
+          p_task_id: task.id,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage("已拒絕此任務。");
+
+      await loadTask();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "拒絕任務時發生錯誤。"
+      );
+    } finally {
+      setUpdating(false);
+    }
+  }
+
   async function handleSubmitTask() {
     if (!task || updating) {
       return;
@@ -367,6 +412,51 @@ export default function TaskDetailPage() {
         error instanceof Error
           ? error.message
           : "確認任務完成時發生錯誤。"
+      );
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleFailTask() {
+    if (!task || updating) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "確定要將此任務判定為失敗嗎？\n\n判定失敗後，此任務將結束，無法再確認完成。"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setUpdating(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "fail_task",
+        {
+          p_task_id: task.id,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage(
+        "此任務已判定為失敗。"
+      );
+
+      await loadTask();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "判定任務失敗時發生錯誤。"
       );
     } finally {
       setUpdating(false);
@@ -581,12 +671,20 @@ export default function TaskDetailPage() {
       return "等待接受";
     }
 
+    if (status === "rejected") {
+      return "已拒絕";
+    }
+
     if (status === "accepted") {
       return "進行中";
     }
 
     if (status === "submitted") {
       return "等待上級確認";
+    }
+
+    if (status === "failed") {
+      return "任務失敗";
     }
 
     if (status === "completed") {
@@ -601,12 +699,20 @@ export default function TaskDetailPage() {
       return "border-amber-900 text-amber-300";
     }
 
+    if (status === "rejected") {
+      return "border-red-900 text-red-300";
+    }
+
     if (status === "accepted") {
       return "border-blue-900 text-blue-300";
     }
 
     if (status === "submitted") {
       return "border-violet-900 text-violet-300";
+    }
+
+    if (status === "failed") {
+      return "border-red-900 text-red-300";
     }
 
     if (status === "completed") {
@@ -626,6 +732,8 @@ export default function TaskDetailPage() {
     task?.due_at &&
       task.status !== "completed" &&
       task.status !== "cancelled" &&
+      task.status !== "rejected" &&
+      task.status !== "failed" &&
       new Date(task.due_at).getTime() < Date.now()
   );
 
@@ -1032,23 +1140,36 @@ export default function TaskDetailPage() {
                   </p>
 
                   <h3 className="mt-2 text-xl font-medium">
-                    接受任務
+                    是否接受任務
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-neutral-400">
-                    接受後，任務狀態會變成「進行中」，並可開始上傳任務證明。
+                    接受後，任務會進入「進行中」並可開始上傳任務證明；若拒絕，任務將結束並標示為「已拒絕」。
                   </p>
 
-                  <button
-                    type="button"
-                    disabled={updating}
-                    onClick={handleAcceptTask}
-                    className="mt-5 rounded-lg bg-neutral-100 px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {updating
-                      ? "處理中…"
-                      : "接受任務"}
-                  </button>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={updating}
+                      onClick={handleAcceptTask}
+                      className="rounded-lg bg-neutral-100 px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {updating
+                        ? "處理中…"
+                        : "接受任務"}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={updating}
+                      onClick={handleRejectTask}
+                      className="rounded-lg border border-red-900 px-5 py-3 text-sm font-medium text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {updating
+                        ? "處理中…"
+                        : "拒絕任務"}
+                    </button>
+                  </div>
                 </section>
               )}
 
@@ -1135,23 +1256,64 @@ export default function TaskDetailPage() {
                   </h3>
 
                   <p className="mt-2 text-sm leading-6 text-neutral-300">
-                    請先查看上方任務證明，確認內容後再完成任務。
+                    請先查看上方任務證明，再選擇確認完成或判定失敗。
                   </p>
 
-                  <button
-                    type="button"
-                    disabled={updating}
-                    onClick={
-                      handleConfirmCompletion
-                    }
-                    className="mt-5 rounded-lg bg-violet-100 px-5 py-3 text-sm font-medium text-violet-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {updating
-                      ? "確認中…"
-                      : "確認完成"}
-                  </button>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={updating}
+                      onClick={
+                        handleConfirmCompletion
+                      }
+                      className="rounded-lg bg-violet-100 px-5 py-3 text-sm font-medium text-violet-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {updating
+                        ? "處理中…"
+                        : "確認完成"}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={updating}
+                      onClick={handleFailTask}
+                      className="rounded-lg border border-red-900 px-5 py-3 text-sm font-medium text-red-300 transition hover:border-red-700 hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {updating
+                        ? "處理中…"
+                        : "判定失敗"}
+                    </button>
+                  </div>
                 </section>
               )}
+
+            {task.status === "rejected" && (
+              <section className="mt-6 rounded-2xl border border-red-900/50 bg-red-950/20 p-6">
+                <p className="text-sm text-red-400">
+                  任務已拒絕
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  {isReceiver
+                    ? "你已拒絕此任務，此任務不會進入進行中狀態。"
+                    : "從屬者已拒絕此任務。"}
+                </p>
+              </section>
+            )}
+
+            {task.status === "failed" && (
+              <section className="mt-6 rounded-2xl border border-red-900/50 bg-red-950/20 p-6">
+                <p className="text-sm text-red-400">
+                  任務失敗
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  {isReceiver
+                    ? "此任務已被上級判定失敗。"
+                    : "你已將此任務判定為失敗。"}
+                </p>
+              </section>
+            )}
 
             {task.status === "completed" && (
               <section className="mt-6 rounded-2xl border border-emerald-900/50 bg-emerald-950/20 p-6">
@@ -1161,6 +1323,18 @@ export default function TaskDetailPage() {
 
                 <p className="mt-2 text-neutral-300">
                   此任務已由上級確認完成，任務證明會保留於紀錄中。
+                </p>
+              </section>
+            )}
+
+            {task.status === "cancelled" && (
+              <section className="mt-6 rounded-2xl border border-neutral-700 bg-neutral-900 p-6">
+                <p className="text-sm text-neutral-400">
+                  任務已取消
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  此任務已取消，不再進行後續流程。
                 </p>
               </section>
             )}

@@ -7,8 +7,10 @@ import { supabase } from "@/lib/supabase";
 
 type TaskStatus =
   | "pending"
+  | "rejected"
   | "accepted"
   | "submitted"
+  | "failed"
   | "completed"
   | "cancelled";
 
@@ -234,26 +236,23 @@ export default function AdminTaskDetailPage() {
 
       setAttachments(signed);
     } catch (error) {
-  
-
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error
-  ) {
-    setErrorMessage(
-      String(
-        (error as { message?: unknown }).message ??
-          "未知錯誤"
-      )
-    );
-  } else {
-    setErrorMessage(
-      "讀取管理者任務詳情時發生錯誤。"
-    );
-  }
-}
-    finally {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error
+      ) {
+        setErrorMessage(
+          String(
+            (error as { message?: unknown }).message ??
+              "未知錯誤"
+          )
+        );
+      } else {
+        setErrorMessage(
+          "讀取管理者任務詳情時發生錯誤。"
+        );
+      }
+    } finally {
       setLoading(false);
     }
   }
@@ -293,12 +292,20 @@ export default function AdminTaskDetailPage() {
       return "等待接受";
     }
 
+    if (status === "rejected") {
+      return "已拒絕";
+    }
+
     if (status === "accepted") {
       return "進行中";
     }
 
     if (status === "submitted") {
       return "待上級確認";
+    }
+
+    if (status === "failed") {
+      return "任務失敗";
     }
 
     if (status === "completed") {
@@ -315,12 +322,20 @@ export default function AdminTaskDetailPage() {
       return "border-amber-900 text-amber-300";
     }
 
+    if (status === "rejected") {
+      return "border-red-900 text-red-300";
+    }
+
     if (status === "accepted") {
       return "border-blue-900 text-blue-300";
     }
 
     if (status === "submitted") {
       return "border-violet-900 text-violet-300";
+    }
+
+    if (status === "failed") {
+      return "border-red-900 text-red-300";
     }
 
     if (status === "completed") {
@@ -334,6 +349,8 @@ export default function AdminTaskDetailPage() {
     task?.due_at &&
       task.status !== "completed" &&
       task.status !== "cancelled" &&
+      task.status !== "rejected" &&
+      task.status !== "failed" &&
       new Date(task.due_at).getTime() <
         Date.now()
   );
@@ -687,6 +704,30 @@ export default function AdminTaskDetailPage() {
                 )}
               </div>
             </section>
+
+            {task.status === "rejected" && (
+              <section className="mt-6 rounded-2xl border border-red-900/50 bg-red-950/20 p-6">
+                <p className="text-sm text-red-400">
+                  任務已拒絕
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  接收者已拒絕此任務。
+                </p>
+              </section>
+            )}
+
+            {task.status === "failed" && (
+              <section className="mt-6 rounded-2xl border border-red-900/50 bg-red-950/20 p-6">
+                <p className="text-sm text-red-400">
+                  任務失敗
+                </p>
+
+                <p className="mt-2 text-neutral-300">
+                  此任務已由發送者判定為失敗。
+                </p>
+              </section>
+            )}
           </>
         )}
       </div>

@@ -7,8 +7,10 @@ import { supabase } from "@/lib/supabase";
 
 type TaskStatus =
   | "pending"
+  | "rejected"
   | "accepted"
   | "submitted"
+  | "failed"
   | "completed"
   | "cancelled";
 
@@ -41,6 +43,8 @@ type FilterType =
   | "accepted"
   | "submitted"
   | "overdue"
+  | "rejected"
+  | "failed"
   | "completed";
 
 export default function TasksPage() {
@@ -86,11 +90,6 @@ export default function TasksPage() {
         return;
       }
 
-      // =========================
-      // 每日任務
-      // 查看自己的任務
-      // =========================
-
       const {
         error: missionError,
       } = await supabase.rpc(
@@ -104,10 +103,6 @@ export default function TasksPage() {
       if (missionError) {
         throw missionError;
       }
-
-      // =========================
-      // 收到的任務
-      // =========================
 
       const {
         data: taskData,
@@ -146,10 +141,6 @@ export default function TasksPage() {
         (taskData ?? []) as Task[];
 
       setTasks(loadedTasks);
-
-      // =========================
-      // 取得發送者資料
-      // =========================
 
       const senderIds = [
         ...new Set(
@@ -201,6 +192,8 @@ export default function TasksPage() {
       task.due_at &&
       task.status !== "completed" &&
       task.status !== "cancelled" &&
+      task.status !== "rejected" &&
+      task.status !== "failed" &&
       new Date(task.due_at).getTime() < Date.now()
     );
   }
@@ -268,6 +261,18 @@ export default function TasksPage() {
           isTaskOverdue(task)
       ).length,
 
+      rejected: tasks.filter(
+        (task) =>
+          task.status ===
+          "rejected"
+      ).length,
+
+      failed: tasks.filter(
+        (task) =>
+          task.status ===
+          "failed"
+      ).length,
+
       completed: tasks.filter(
         (task) =>
           task.status ===
@@ -322,12 +327,20 @@ export default function TasksPage() {
       return "待接受";
     }
 
+    if (status === "rejected") {
+      return "已拒絕";
+    }
+
     if (status === "accepted") {
       return "進行中";
     }
 
     if (status === "submitted") {
       return "等待上級確認";
+    }
+
+    if (status === "failed") {
+      return "任務失敗";
     }
 
     if (status === "completed") {
@@ -344,12 +357,20 @@ export default function TasksPage() {
       return "border-amber-900/60 bg-amber-950/20 text-amber-300";
     }
 
+    if (status === "rejected") {
+      return "border-red-900/60 bg-red-950/20 text-red-300";
+    }
+
     if (status === "accepted") {
       return "border-blue-900/60 bg-blue-950/20 text-blue-300";
     }
 
     if (status === "submitted") {
       return "border-violet-900/60 bg-violet-950/20 text-violet-300";
+    }
+
+    if (status === "failed") {
+      return "border-red-900/60 bg-red-950/20 text-red-300";
     }
 
     if (status === "completed") {
@@ -573,6 +594,8 @@ export default function TasksPage() {
               ["accepted", "進行中"],
               ["submitted", "待上級確認"],
               ["overdue", "已逾期"],
+              ["rejected", `已拒絕 ${counts.rejected}`],
+              ["failed", `任務失敗 ${counts.failed}`],
               ["completed", "已完成"],
             ].map(
               ([value, label]) => (

@@ -7,8 +7,10 @@ import { supabase } from "@/lib/supabase";
 
 type TaskStatus =
   | "pending"
+  | "rejected"
   | "accepted"
   | "submitted"
+  | "failed"
   | "completed"
   | "cancelled";
 
@@ -46,6 +48,8 @@ type FilterType =
   | "accepted"
   | "submitted"
   | "overdue"
+  | "rejected"
+  | "failed"
   | "completed"
   | "cancelled";
 
@@ -177,6 +181,8 @@ export default function SentTasksPage() {
       task.due_at &&
       task.status !== "completed" &&
       task.status !== "cancelled" &&
+      task.status !== "rejected" &&
+      task.status !== "failed" &&
       new Date(task.due_at).getTime() < Date.now()
     );
   }
@@ -267,12 +273,20 @@ export default function SentTasksPage() {
       return "等待接受";
     }
 
+    if (status === "rejected") {
+      return "已拒絕";
+    }
+
     if (status === "accepted") {
       return "進行中";
     }
 
     if (status === "submitted") {
       return "待你確認";
+    }
+
+    if (status === "failed") {
+      return "任務失敗";
     }
 
     if (status === "completed") {
@@ -289,12 +303,20 @@ export default function SentTasksPage() {
       return "border-amber-900 text-amber-300";
     }
 
+    if (status === "rejected") {
+      return "border-red-900 text-red-300";
+    }
+
     if (status === "accepted") {
       return "border-blue-900 text-blue-300";
     }
 
     if (status === "submitted") {
       return "border-violet-900 text-violet-300";
+    }
+
+    if (status === "failed") {
+      return "border-red-900 text-red-300";
     }
 
     if (status === "completed") {
@@ -324,6 +346,16 @@ export default function SentTasksPage() {
       isTaskOverdue(
         item.task
       )
+  ).length;
+
+  const rejectedCount = tasks.filter(
+    (item) =>
+      item.task.status === "rejected"
+  ).length;
+
+  const failedCount = tasks.filter(
+    (item) =>
+      item.task.status === "failed"
   ).length;
 
   const completedCount = tasks.filter(
@@ -486,7 +518,11 @@ export default function SentTasksPage() {
                 setFilter(
                   completedCount > 0
                     ? "completed"
-                    : "cancelled"
+                    : failedCount > 0
+                      ? "failed"
+                      : rejectedCount > 0
+                        ? "rejected"
+                        : "cancelled"
                 )
               }
               className="rounded-2xl border border-emerald-900/50 bg-emerald-950/10 p-5 text-left transition hover:border-emerald-700"
@@ -498,7 +534,10 @@ export default function SentTasksPage() {
                   </p>
 
                   <p className="mt-2 text-3xl font-semibold text-emerald-200">
-                    {completedCount + cancelledCount}
+                    {completedCount +
+                      failedCount +
+                      rejectedCount +
+                      cancelledCount}
                   </p>
                 </div>
 
@@ -519,10 +558,12 @@ export default function SentTasksPage() {
 
                 <div className="rounded-xl bg-neutral-950/70 p-3">
                   <p className="text-neutral-500">
-                    已取消
+                    其他結案
                   </p>
                   <p className="mt-1 text-lg text-neutral-100">
-                    {cancelledCount}
+                    {failedCount +
+                      rejectedCount +
+                      cancelledCount}
                   </p>
                 </div>
               </div>
@@ -568,6 +609,8 @@ export default function SentTasksPage() {
               ["accepted", "進行中"],
               ["submitted", "待你確認"],
               ["overdue", "已逾期"],
+              ["rejected", `已拒絕 ${rejectedCount}`],
+              ["failed", `任務失敗 ${failedCount}`],
               ["completed", "已完成"],
               ["cancelled", "已取消"],
             ].map(([value, label]) => (
