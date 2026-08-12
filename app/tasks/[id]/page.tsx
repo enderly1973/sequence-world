@@ -20,6 +20,9 @@ type Task = {
   content: string;
   status: TaskStatus;
   due_at: string | null;
+  reward_points: number;
+  penalty_points: number;
+  penalty_applied_at: string | null;
   accepted_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
@@ -65,6 +68,7 @@ export default function TaskDetailPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [uploading, setUploading] = useState(false);
+
   const [deletingAttachmentId, setDeletingAttachmentId] =
     useState<string | null>(null);
 
@@ -109,6 +113,9 @@ export default function TaskDetailPage() {
           content,
           status,
           due_at,
+          reward_points,
+          penalty_points,
+          penalty_applied_at,
           accepted_at,
           completed_at,
           cancelled_at,
@@ -137,34 +144,32 @@ export default function TaskDetailPage() {
         loadedTask.receiver_id,
       ];
 
-      const [
-        profileResult,
-        attachmentResult,
-      ] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select(`
-            id,
-            nickname,
-            join_sequence
-          `)
-          .in("id", profileIds),
+      const [profileResult, attachmentResult] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select(`
+              id,
+              nickname,
+              join_sequence
+            `)
+            .in("id", profileIds),
 
-        supabase
-          .from("task_attachments")
-          .select(`
-            id,
-            task_id,
-            uploader_id,
-            file_path,
-            file_type,
-            created_at
-          `)
-          .eq("task_id", taskId)
-          .order("created_at", {
-            ascending: true,
-          }),
-      ]);
+          supabase
+            .from("task_attachments")
+            .select(`
+              id,
+              task_id,
+              uploader_id,
+              file_path,
+              file_type,
+              created_at
+            `)
+            .eq("task_id", taskId)
+            .order("created_at", {
+              ascending: true,
+            }),
+        ]);
 
       if (profileResult.error) {
         throw profileResult.error;
@@ -402,6 +407,7 @@ export default function TaskDetailPage() {
 
         const isImage =
           file.type.startsWith("image/");
+
         const isVideo =
           file.type.startsWith("video/");
 
@@ -511,6 +517,7 @@ export default function TaskDetailPage() {
     setDeletingAttachmentId(
       attachment.id
     );
+
     setErrorMessage("");
     setSuccessMessage("");
 
@@ -774,6 +781,34 @@ export default function TaskDetailPage() {
             </section>
 
             <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+              <p className="text-sm text-neutral-500">
+                任務獎懲
+              </p>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-4">
+                  <p className="text-sm text-emerald-400">
+                    完成獎勵
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-emerald-200">
+                    +{task.reward_points} 世界點數
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-red-900/50 bg-red-950/20 p-4">
+                  <p className="text-sm text-red-400">
+                    逾期懲罰
+                  </p>
+
+                  <p className="mt-2 text-xl font-semibold text-red-200">
+                    -{task.penalty_points} 世界點數
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="mt-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-sm text-neutral-500">
@@ -922,6 +957,7 @@ export default function TaskDetailPage() {
                     {task.due_at
                       ? formatDate(task.due_at)
                       : "無期限"}
+
                     {isOverdue &&
                       "（已逾期）"}
                   </span>
@@ -966,6 +1002,25 @@ export default function TaskDetailPage() {
                 <p className="mt-2 text-neutral-300">
                   此任務已超過完成期限，但仍可繼續接受、提交與確認完成。
                 </p>
+
+                {task.penalty_applied_at && (
+                  <div className="mt-4 rounded-xl border border-red-900/50 bg-red-950/30 p-4">
+                    <p className="text-sm text-red-300">
+                      逾期懲罰已執行
+                    </p>
+
+                    <p className="mt-2 text-lg font-semibold text-red-200">
+                      已扣除 {task.penalty_points} 世界點數
+                    </p>
+
+                    <p className="mt-1 text-xs text-neutral-500">
+                      扣點時間：
+                      {formatDate(
+                        task.penalty_applied_at
+                      )}
+                    </p>
+                  </div>
+                )}
               </section>
             )}
 

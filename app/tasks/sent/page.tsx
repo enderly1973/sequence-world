@@ -20,6 +20,9 @@ type TaskRow = {
   content: string;
   status: TaskStatus;
   due_at: string | null;
+  reward_points: number;
+  penalty_points: number;
+  penalty_applied_at: string | null;
   accepted_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
@@ -91,6 +94,9 @@ export default function SentTasksPage() {
           content,
           status,
           due_at,
+          reward_points,
+          penalty_points,
+          penalty_applied_at,
           accepted_at,
           completed_at,
           cancelled_at,
@@ -598,98 +604,114 @@ export default function SentTasksPage() {
                     isTaskOverdue(task);
 
                   return (
-                  <Link
-                    key={task.id}
-                    href={`/tasks/${task.id}`}
-                    className={`block rounded-xl border p-5 transition ${
-                      task.status === "submitted"
-                        ? "border-violet-900/60 bg-violet-950/10 hover:border-violet-700"
-                        : overdue
-                          ? "border-red-900/60 bg-red-950/10 hover:border-red-700"
-                          : "border-neutral-800 bg-neutral-950 hover:bg-neutral-800"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <p className="text-lg font-medium">
-                          {task.title}
-                        </p>
+                    <Link
+                      key={task.id}
+                      href={`/tasks/${task.id}`}
+                      className={`block rounded-xl border p-5 transition ${
+                        task.status === "submitted"
+                          ? "border-violet-900/60 bg-violet-950/10 hover:border-violet-700"
+                          : overdue
+                            ? "border-red-900/60 bg-red-950/10 hover:border-red-700"
+                            : "border-neutral-800 bg-neutral-950 hover:bg-neutral-800"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-medium">
+                            {task.title}
+                          </p>
 
-                        <p className="mt-2 text-sm text-neutral-500">
-                          接收者：
-                          {receiver
-                            ? `${receiver.nickname}・${formatSequence(
-                                receiver.join_sequence
-                              )}`
-                            : "未知成員"}
-                        </p>
+                          <p className="mt-2 text-sm text-neutral-500">
+                            接收者：
+                            {receiver
+                              ? `${receiver.nickname}・${formatSequence(
+                                  receiver.join_sequence
+                                )}`
+                              : "未知成員"}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs ${
+                            overdue
+                              ? "border-red-900 text-red-300"
+                              : getStatusClass(
+                                  task.status
+                                )
+                          }`}
+                        >
+                          {overdue
+                            ? "已逾期"
+                            : getStatusLabel(
+                                task.status
+                              )}
+                        </span>
                       </div>
 
-                      <span
-                        className={`rounded-full border px-3 py-1 text-xs ${
-                          overdue
-                            ? "border-red-900 text-red-300"
-                            : getStatusClass(
-                                task.status
-                              )
-                        }`}
-                      >
-                        {overdue
-                          ? "已逾期"
-                          : getStatusLabel(
-                              task.status
-                            )}
-                      </span>
-                    </div>
+                      <p className="mt-4 line-clamp-2 text-sm leading-6 text-neutral-400">
+                        {task.content}
+                      </p>
 
-                    <p className="mt-4 line-clamp-2 text-sm leading-6 text-neutral-400">
-                      {task.content}
-                    </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 py-1 text-xs font-medium text-emerald-300">
+                          完成 +{task.reward_points}
+                        </span>
 
-                    <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-neutral-800 pt-4 text-xs text-neutral-600">
-                      <span>
-                        發送時間：
-                        {formatDate(
-                          task.created_at
+                        <span className="rounded-lg border border-red-900/50 bg-red-950/20 px-3 py-1 text-xs font-medium text-red-300">
+                          逾期 -{task.penalty_points}
+                        </span>
+
+                        {task.penalty_applied_at && (
+                          <span className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200">
+                            已扣點
+                          </span>
                         )}
-                      </span>
+                      </div>
 
-                      <span
-                        className={
-                          overdue
-                            ? "font-medium text-red-400"
-                            : undefined
-                        }
-                      >
-                        期限：
-                        {task.due_at
-                          ? formatDate(
-                              task.due_at
-                            )
-                          : "無期限"}
-                        {overdue &&
-                          "（已逾期）"}
-                      </span>
-
-                      {task.accepted_at && (
+                      <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-neutral-800 pt-4 text-xs text-neutral-600">
                         <span>
-                          接受：
+                          發送時間：
                           {formatDate(
-                            task.accepted_at
+                            task.created_at
                           )}
                         </span>
-                      )}
 
-                      {task.completed_at && (
-                        <span>
-                          完成：
-                          {formatDate(
-                            task.completed_at
-                          )}
+                        <span
+                          className={
+                            overdue
+                              ? "font-medium text-red-400"
+                              : undefined
+                          }
+                        >
+                          期限：
+                          {task.due_at
+                            ? formatDate(
+                                task.due_at
+                              )
+                            : "無期限"}
+                          {overdue &&
+                            "（已逾期）"}
                         </span>
-                      )}
-                    </div>
-                  </Link>
+
+                        {task.accepted_at && (
+                          <span>
+                            接受：
+                            {formatDate(
+                              task.accepted_at
+                            )}
+                          </span>
+                        )}
+
+                        {task.completed_at && (
+                          <span>
+                            完成：
+                            {formatDate(
+                              task.completed_at
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </Link>
                   );
                 }
               )}

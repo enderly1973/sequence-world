@@ -20,6 +20,9 @@ type Task = {
   content: string;
   status: TaskStatus;
   due_at: string | null;
+  reward_points: number;
+  penalty_points: number;
+  penalty_applied_at: string | null;
   accepted_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
@@ -119,6 +122,9 @@ export default function TasksPage() {
           content,
           status,
           due_at,
+          reward_points,
+          penalty_points,
+          penalty_applied_at,
           accepted_at,
           completed_at,
           cancelled_at,
@@ -627,6 +633,22 @@ export default function TasksPage() {
                           <p className="mt-2 line-clamp-2 text-sm leading-6 text-neutral-400">
                             {task.content}
                           </p>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <span className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 px-3 py-1 text-xs font-medium text-emerald-300">
+                              完成 +{task.reward_points}
+                            </span>
+
+                            <span className="rounded-lg border border-red-900/50 bg-red-950/20 px-3 py-1 text-xs font-medium text-red-300">
+                              逾期 -{task.penalty_points}
+                            </span>
+
+                            {task.penalty_applied_at && (
+                              <span className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-1 text-xs font-medium text-red-200">
+                                已扣點
+                              </span>
+                            )}
+                          </div>
 
                           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-neutral-500">
                             <span>

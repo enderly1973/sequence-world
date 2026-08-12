@@ -89,6 +89,18 @@ export default function CreateTaskPage() {
     useState("");
 
   const [
+    rewardPoints,
+    setRewardPoints,
+  ] =
+    useState("0");
+
+  const [
+    penaltyPoints,
+    setPenaltyPoints,
+  ] =
+    useState("0");
+
+  const [
     loading,
     setLoading,
   ] =
@@ -348,6 +360,52 @@ export default function CreateTaskPage() {
         );
       }
 
+      const parsedRewardPoints =
+        Number.parseInt(
+          rewardPoints || "0",
+          10
+        );
+
+      const parsedPenaltyPoints =
+        Number.parseInt(
+          penaltyPoints || "0",
+          10
+        );
+
+      if (
+        Number.isNaN(
+          parsedRewardPoints
+        ) ||
+        parsedRewardPoints < 0
+      ) {
+        throw new Error(
+          "完成獎勵必須是 0 以上的整數。"
+        );
+      }
+
+      if (
+        Number.isNaN(
+          parsedPenaltyPoints
+        ) ||
+        parsedPenaltyPoints < 0
+      ) {
+        throw new Error(
+          "逾期懲罰必須是 0 以上的整數。"
+        );
+      }
+
+      if (
+        parsedRewardPoints > 0 &&
+        parsedPenaltyPoints <
+          parsedRewardPoints * 2
+      ) {
+        throw new Error(
+          `逾期懲罰至少需為完成獎勵的 2 倍，目前至少需要 ${
+            parsedRewardPoints * 2
+          } 點。`
+        );
+      }
+
       // =========================
       // 發送前再次讀取最新世界狀態
       // =========================
@@ -388,6 +446,12 @@ export default function CreateTaskPage() {
 
             p_due_at:
               parsedDueAt,
+
+            p_reward_points:
+              parsedRewardPoints,
+
+            p_penalty_points:
+              parsedPenaltyPoints,
           }
         );
 
@@ -404,6 +468,10 @@ export default function CreateTaskPage() {
       setContent("");
 
       setDueAt("");
+
+      setRewardPoints("0");
+
+      setPenaltyPoints("0");
 
       window.setTimeout(
         () => {
@@ -473,6 +541,29 @@ export default function CreateTaskPage() {
       worldStatus
         ?.can_send_task
     );
+
+
+  const rewardNumber =
+    Number.parseInt(
+      rewardPoints || "0",
+      10
+    ) || 0;
+
+  const penaltyNumber =
+    Number.parseInt(
+      penaltyPoints || "0",
+      10
+    ) || 0;
+
+  const minimumPenalty =
+    rewardNumber > 0
+      ? rewardNumber * 2
+      : 0;
+
+  const penaltyTooLow =
+    rewardNumber > 0 &&
+    penaltyNumber <
+      minimumPenalty;
 
   if (
     loading
@@ -759,6 +850,132 @@ export default function CreateTaskPage() {
 
                 </div>
 
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+
+                  <div>
+
+                    <label
+                      htmlFor="rewardPoints"
+                      className="text-sm text-neutral-400"
+                    >
+                      完成獎勵
+                    </label>
+
+                    <div className="mt-2 flex items-center rounded-lg border border-emerald-900/60 bg-emerald-950/10">
+
+                      <input
+                        id="rewardPoints"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={
+                          rewardPoints
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setRewardPoints(
+                            event.target.value
+                          )
+                        }
+                        className="w-full bg-transparent px-4 py-3 text-neutral-100 outline-none"
+                      />
+
+                      <span className="pr-4 text-sm text-emerald-400">
+                        世界點數
+                      </span>
+
+                    </div>
+
+                    <p className="mt-2 text-xs text-neutral-600">
+                      上級確認任務完成後，系統發放給接收者。
+                    </p>
+
+                  </div>
+
+                  <div>
+
+                    <label
+                      htmlFor="penaltyPoints"
+                      className="text-sm text-neutral-400"
+                    >
+                      逾期懲罰
+                    </label>
+
+                    <div className="mt-2 flex items-center rounded-lg border border-red-900/60 bg-red-950/10">
+
+                      <input
+                        id="penaltyPoints"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={
+                          penaltyPoints
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setPenaltyPoints(
+                            event.target.value
+                          )
+                        }
+                        className="w-full bg-transparent px-4 py-3 text-neutral-100 outline-none"
+                      />
+
+                      <span className="pr-4 text-sm text-red-400">
+                        世界點數
+                      </span>
+
+                    </div>
+
+                    <p
+                      className={`mt-2 text-xs ${
+                        penaltyTooLow
+                          ? "text-red-400"
+                          : "text-neutral-600"
+                      }`}
+                    >
+                      {rewardNumber > 0
+                        ? `完成獎勵為 ${rewardNumber} 點時，逾期懲罰至少需 ${minimumPenalty} 點。`
+                        : "完成獎勵為 0 時，逾期懲罰可自行設定。"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+
+                  <p className="text-sm text-neutral-400">
+                    獎懲設定
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+
+                    <span className="text-emerald-300">
+                      完成 +{rewardNumber} 點
+                    </span>
+
+                    <span
+                      className={
+                        penaltyTooLow
+                          ? "text-red-400"
+                          : "text-red-300"
+                      }
+                    >
+                      逾期 -{penaltyNumber} 點
+                    </span>
+
+                  </div>
+
+                  {penaltyTooLow && (
+                    <p className="mt-3 text-sm text-red-400">
+                      逾期懲罰不足，目前至少需要 {minimumPenalty} 點。
+                    </p>
+                  )}
+
+                </div>
+
                 <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-neutral-800 pt-6">
 
                   <Link
@@ -771,7 +988,8 @@ export default function CreateTaskPage() {
                   <button
                     type="submit"
                     disabled={
-                      submitting
+                      submitting ||
+                      penaltyTooLow
                     }
                     className="rounded-lg bg-neutral-100 px-5 py-3 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
