@@ -138,6 +138,23 @@ export default function HierarchyChatPage() {
 
       setCurrentUserId(user.id);
 
+      const { error: readUpsertError } = await supabase
+  .from("hierarchy_chat_reads")
+  .upsert(
+    {
+      room_id: roomId,
+      user_id: user.id,
+      last_read_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "room_id,user_id",
+    }
+  );
+
+if (readUpsertError) {
+  console.error(readUpsertError);
+}
+
       const { data: roomData, error: roomError } =
         await supabase
           .from("hierarchy_chat_rooms")
