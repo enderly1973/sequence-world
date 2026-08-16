@@ -632,6 +632,12 @@ export default function AdminPage() {
             />
 
             <AdminCard
+  href="/admin/hierarchy-chats"
+  title="階層聊天室監督"
+  text="唯讀查看所有階層聊天室、成員數與對話紀錄。"
+/>
+
+            <AdminCard
               href="/admin/tasks"
               title="任務管理"
               text="查看所有玩家任務、任務狀態與照片／影片證明。"
