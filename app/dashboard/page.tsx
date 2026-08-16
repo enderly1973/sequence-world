@@ -362,7 +362,27 @@ export default function DashboardPage() {
           {
             event: "INSERT",
             schema: "public",
-            table: "master_slave_chat_messages",
+            table:
+              "master_slave_chat_messages",
+          },
+          async () => {
+            if (!active) {
+              return;
+            }
+
+            await loadChatUnreadCount(
+              user.id
+            );
+          }
+        )
+
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table:
+              "hierarchy_chat_messages",
           },
           async () => {
             if (!active) {
@@ -678,202 +698,444 @@ export default function DashboardPage() {
   async function loadChatUnreadCount(
     userId: string
   ) {
-    const {
-      data: roomData,
-      error: roomError,
-    } =
-      await supabase
-        .from(
-          "master_slave_chat_rooms"
-        )
-        .select("id")
-        .or(
-          `master_id.eq.${userId},slave_id.eq.${userId}`
-        );
+    try {
+      let privateUnread =
+        0;
 
-    if (roomError) {
+      let hierarchyUnread =
+        0;
+
+      /*
+       * ============================
+       * 私人聊天室未讀
+       * ============================
+       */
+
+      const {
+        data:
+          privateRooms,
+        error:
+          privateRoomError,
+      } =
+        await supabase
+          .from(
+            "master_slave_chat_rooms"
+          )
+          .select(
+            "id"
+          )
+          .or(
+            `master_id.eq.${userId},slave_id.eq.${userId}`
+          );
+
+      if (
+        privateRoomError
+      ) {
+        throw privateRoomError;
+      }
+
+      if (
+        privateRooms &&
+        privateRooms.length >
+          0
+      ) {
+        const privateRoomIds =
+          privateRooms.map(
+            (room) =>
+              room.id
+          );
+
+        const {
+          data:
+            privateReads,
+          error:
+            privateReadError,
+        } =
+          await supabase
+            .from(
+              "master_slave_chat_reads"
+            )
+            .select(
+              "room_id, last_read_at"
+            )
+            .eq(
+              "user_id",
+              userId
+            )
+            .in(
+              "room_id",
+              privateRoomIds
+            );
+
+        if (
+          privateReadError
+        ) {
+          throw privateReadError;
+        }
+
+        const privateReadMap =
+          new Map(
+            (
+              privateReads ??
+              []
+            ).map(
+              (row) => [
+                row.room_id,
+                row.last_read_at,
+              ]
+            )
+          );
+
+        const privateCounts =
+          await Promise.all(
+            privateRoomIds.map(
+              async (
+                roomId
+              ) => {
+                let query =
+                  supabase
+                    .from(
+                      "master_slave_chat_messages"
+                    )
+                    .select(
+                      "*",
+                      {
+                        count:
+                          "exact",
+                        head:
+                          true,
+                      }
+                    )
+                    .eq(
+                      "room_id",
+                      roomId
+                    )
+                    .neq(
+                      "sender_id",
+                      userId
+                    );
+
+                const lastReadAt =
+                  privateReadMap.get(
+                    roomId
+                  );
+
+                if (
+                  lastReadAt
+                ) {
+                  query =
+                    query.gt(
+                      "created_at",
+                      lastReadAt
+                    );
+                }
+
+                const {
+                  count,
+                  error,
+                } =
+                  await query;
+
+                if (
+                  error
+                ) {
+                  console.error(
+                    "計算私人聊天室未讀失敗:",
+                    error
+                  );
+
+                  return 0;
+                }
+
+                return (
+                  count ??
+                  0
+                );
+              }
+            )
+          );
+
+        privateUnread =
+          privateCounts.reduce(
+            (
+              total,
+              count
+            ) =>
+              total +
+              count,
+            0
+          );
+      }
+
+      /*
+       * ============================
+       * 階層聊天室未讀
+       * ============================
+       */
+
+      const {
+        data:
+          hierarchyRooms,
+        error:
+          hierarchyRoomError,
+      } =
+        await supabase
+          .from(
+            "hierarchy_chat_rooms"
+          )
+          .select(
+            "id"
+          );
+
+      if (
+        hierarchyRoomError
+      ) {
+        throw hierarchyRoomError;
+      }
+
+      if (
+        hierarchyRooms &&
+        hierarchyRooms.length >
+          0
+      ) {
+        const hierarchyRoomIds =
+          hierarchyRooms.map(
+            (room) =>
+              room.id
+          );
+
+        const {
+          data:
+            hierarchyReads,
+          error:
+            hierarchyReadError,
+        } =
+          await supabase
+            .from(
+              "hierarchy_chat_reads"
+            )
+            .select(
+              "room_id, last_read_at"
+            )
+            .eq(
+              "user_id",
+              userId
+            )
+            .in(
+              "room_id",
+              hierarchyRoomIds
+            );
+
+        if (
+          hierarchyReadError
+        ) {
+          throw hierarchyReadError;
+        }
+
+        const hierarchyReadMap =
+          new Map(
+            (
+              hierarchyReads ??
+              []
+            ).map(
+              (row) => [
+                row.room_id,
+                row.last_read_at,
+              ]
+            )
+          );
+
+        const hierarchyCounts =
+          await Promise.all(
+            hierarchyRoomIds.map(
+              async (
+                roomId
+              ) => {
+                let query =
+                  supabase
+                    .from(
+                      "hierarchy_chat_messages"
+                    )
+                    .select(
+                      "*",
+                      {
+                        count:
+                          "exact",
+                        head:
+                          true,
+                      }
+                    )
+                    .eq(
+                      "room_id",
+                      roomId
+                    )
+                    .neq(
+                      "sender_id",
+                      userId
+                    );
+
+                const lastReadAt =
+                  hierarchyReadMap.get(
+                    roomId
+                  );
+
+                if (
+                  lastReadAt
+                ) {
+                  query =
+                    query.gt(
+                      "created_at",
+                      lastReadAt
+                    );
+                }
+
+                const {
+                  count,
+                  error,
+                } =
+                  await query;
+
+                if (
+                  error
+                ) {
+                  console.error(
+                    "計算階層聊天室未讀失敗:",
+                    error
+                  );
+
+                  return 0;
+                }
+
+                return (
+                  count ??
+                  0
+                );
+              }
+            )
+          );
+
+        hierarchyUnread =
+          hierarchyCounts.reduce(
+            (
+              total,
+              count
+            ) =>
+              total +
+              count,
+            0
+          );
+      }
+
+      setChatUnreadCount(
+        privateUnread +
+          hierarchyUnread
+      );
+    } catch (error) {
       console.error(
         "讀取聊天室未讀數失敗:",
-        roomError
+        error
       );
+    }
+  }
+
+  async function loadTaskReminderSummary(
+    userId: string
+  ) {
+    const [
+      receivedResult,
+      sentResult,
+    ] =
+      await Promise.all([
+        supabase
+          .from(
+            "tasks"
+          )
+          .select(
+            "status"
+          )
+          .eq(
+            "receiver_id",
+            userId
+          )
+          .in(
+            "status",
+            [
+              "pending",
+              "accepted",
+              "submitted",
+            ]
+          ),
+
+        supabase
+          .from(
+            "tasks"
+          )
+          .select(
+            "status"
+          )
+          .eq(
+            "sender_id",
+            userId
+          )
+          .eq(
+            "status",
+            "submitted"
+          ),
+      ]);
+
+    if (
+      receivedResult.error
+    ) {
+      console.error(
+        "讀取收到任務提醒失敗:",
+        receivedResult.error
+      );
+
       return;
     }
 
     if (
-      !roomData ||
-      roomData.length === 0
+      sentResult.error
     ) {
-      setChatUnreadCount(0);
-      return;
-    }
-
-    const roomIds =
-      roomData.map(
-        (room) =>
-          room.id
-      );
-
-    const {
-      data: readData,
-      error: readError,
-    } =
-      await supabase
-        .from(
-          "master_slave_chat_reads"
-        )
-        .select(
-          "room_id, last_read_at"
-        )
-        .eq(
-          "user_id",
-          userId
-        )
-        .in(
-          "room_id",
-          roomIds
-        );
-
-    if (readError) {
       console.error(
-        "讀取聊天室已讀紀錄失敗:",
-        readError
+        "讀取待確認任務提醒失敗:",
+        sentResult.error
       );
+
       return;
     }
 
-    const readMap =
-      new Map(
-        (
-          readData ??
-          []
-        ).map(
-          (row) => [
-            row.room_id,
-            row.last_read_at,
-          ]
-        )
-      );
-
-    const counts =
-      await Promise.all(
-        roomIds.map(
-          async (
-            roomId
-          ) => {
-            let query =
-              supabase
-                .from(
-                  "master_slave_chat_messages"
-                )
-                .select(
-                  "*",
-                  {
-                    count:
-                      "exact",
-                    head:
-                      true,
-                  }
-                )
-                .eq(
-                  "room_id",
-                  roomId
-                )
-                .neq(
-                  "sender_id",
-                  userId
-                );
-
-            const lastReadAt =
-              readMap.get(
-                roomId
-              );
-
-            if (
-              lastReadAt
-            ) {
-              query =
-                query.gt(
-                  "created_at",
-                  lastReadAt
-                );
-            }
-
-            const {
-              count,
-              error,
-            } =
-              await query;
-
-            if (error) {
-              console.error(
-                "計算聊天室未讀訊息失敗:",
-                error
-              );
-              return 0;
-            }
-
-            return (
-              count ??
-              0
-            );
-          }
-        )
-      );
-
-    setChatUnreadCount(
-      counts.reduce(
-        (
-          total,
-          count
-        ) =>
-          total +
-          count,
-        0
-      )
-    );
-  }
-
-  async function loadTaskReminderSummary(userId: string) {
-    const [receivedResult, sentResult] = await Promise.all([
-      supabase
-        .from("tasks")
-        .select("status")
-        .eq("receiver_id", userId)
-        .in("status", ["pending", "accepted", "submitted"]),
-
-      supabase
-        .from("tasks")
-        .select("status")
-        .eq("sender_id", userId)
-        .eq("status", "submitted"),
-    ]);
-
-    if (receivedResult.error) {
-      console.error("讀取收到任務提醒失敗:", receivedResult.error);
-      return;
-    }
-
-    if (sentResult.error) {
-      console.error("讀取待確認任務提醒失敗:", sentResult.error);
-      return;
-    }
-
-    const received = receivedResult.data ?? [];
+    const received =
+      receivedResult.data ??
+      [];
 
     setTaskReminderSummary({
-      received_pending: received.filter(
-        (task) => task.status === "pending"
-      ).length,
+      received_pending:
+        received.filter(
+          (task) =>
+            task.status ===
+            "pending"
+        ).length,
 
-      received_accepted: received.filter(
-        (task) => task.status === "accepted"
-      ).length,
+      received_accepted:
+        received.filter(
+          (task) =>
+            task.status ===
+            "accepted"
+        ).length,
 
-      received_submitted: received.filter(
-        (task) => task.status === "submitted"
-      ).length,
+      received_submitted:
+        received.filter(
+          (task) =>
+            task.status ===
+            "submitted"
+        ).length,
 
-      sent_submitted: (sentResult.data ?? []).length,
+      sent_submitted:
+        (
+          sentResult.data ??
+          []
+        ).length,
     });
   }
 
@@ -1026,14 +1288,6 @@ export default function DashboardPage() {
         );
         return;
       }
-
-      /*
-       * 固定順序：
-       * 1. 結算今日維持費
-       * 2. 讀取真正維持費帳本紀錄
-       * 3. 產生／取得今日世界事件
-       * 4. 讀取最新世界狀態
-       */
 
       await settleDailyCost();
 
@@ -1260,13 +1514,17 @@ export default function DashboardPage() {
 
       await Promise.all([
         loadUnreadCount(),
+
         loadChatUnreadCount(
           userId
         ),
+
         loadPendingActions(),
+
         loadTaskReminderSummary(
           userId
         ),
+
         loadRecentNotifications(
           userId
         ),
@@ -1481,7 +1739,6 @@ export default function DashboardPage() {
     pendingActions
       .pending_competitions;
 
-
   const receivedOpenTaskCount =
     taskReminderSummary.received_pending +
     taskReminderSummary.received_accepted +
@@ -1490,6 +1747,14 @@ export default function DashboardPage() {
   const hasTaskReminder =
     receivedOpenTaskCount > 0 ||
     taskReminderSummary.sent_submitted > 0;
+
+  /*
+   * 右上角通知中心總未讀：
+   * 一般通知 + 私人聊天室 + 階層聊天室
+   */
+  const totalNotificationCount =
+    unreadNotifications +
+    chatUnreadCount;
 
   function formatSequence(
     sequence: number
@@ -1721,13 +1986,13 @@ export default function DashboardPage() {
             >
               通知中心
 
-              {unreadNotifications >
+              {totalNotificationCount >
                 0 && (
                 <span className="absolute -right-2 -top-2 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
-                  {unreadNotifications >
+                  {totalNotificationCount >
                   99
                     ? "99+"
-                    : unreadNotifications}
+                    : totalNotificationCount}
                 </span>
               )}
             </Link>
@@ -2399,6 +2664,43 @@ export default function DashboardPage() {
               </Link>
             )}
 
+            {chatUnreadCount >
+              0 && (
+              <Link
+                href="/chat"
+                className="mb-6 block rounded-2xl border border-violet-900/60 bg-violet-950/20 p-6 transition hover:border-violet-700"
+              >
+
+                <div className="flex flex-wrap items-center justify-between gap-5">
+
+                  <div>
+
+                    <p className="text-sm text-violet-400">
+                      你有新的聊天室訊息
+                    </p>
+
+                    <h2 className="mt-2 text-2xl font-semibold">
+                      {
+                        chatUnreadCount
+                      }{" "}
+                      則未讀訊息
+                    </h2>
+
+                    <p className="mt-2 text-sm text-neutral-400">
+                      包含私人聊天室與階層聊天室。
+                    </p>
+
+                  </div>
+
+                  <span className="rounded-xl bg-violet-100 px-5 py-3 text-sm font-medium text-violet-950">
+                    前往通訊中心
+                  </span>
+
+                </div>
+
+              </Link>
+            )}
+
             <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
 
               <div className="flex items-center justify-between gap-4">
@@ -2710,17 +3012,33 @@ export default function DashboardPage() {
 
               <Link
                 href="/notifications"
-                className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5"
+                className={`rounded-2xl border p-5 ${
+                  totalNotificationCount >
+                  0
+                    ? "border-red-900/60 bg-red-950/20"
+                    : "border-neutral-800 bg-neutral-900"
+                }`}
               >
                 <p className="text-sm text-neutral-500">
-                  未讀通知
+                  通知中心未讀
                 </p>
 
                 <p className="mt-3 text-3xl font-semibold">
                   {
-                    unreadNotifications
+                    totalNotificationCount
                   }
                 </p>
+
+                {chatUnreadCount >
+                  0 && (
+                  <p className="mt-2 text-xs text-violet-300">
+                    聊天訊息{" "}
+                    {
+                      chatUnreadCount
+                    }
+                    {" "}則
+                  </p>
+                )}
               </Link>
 
             </section>
@@ -2840,9 +3158,30 @@ export default function DashboardPage() {
 
                 <Link
                   href="/notifications"
-                  className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5"
+                  className={`rounded-2xl border p-5 ${
+                    totalNotificationCount >
+                    0
+                      ? "border-red-900/60 bg-red-950/20"
+                      : "border-neutral-800 bg-neutral-900"
+                  }`}
                 >
-                  通知中心
+                  <div className="flex items-center justify-between gap-3">
+
+                    <span>
+                      通知中心
+                    </span>
+
+                    {totalNotificationCount >
+                      0 && (
+                      <span className="flex min-h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-2 text-xs font-semibold text-white">
+                        {totalNotificationCount >
+                        99
+                          ? "99+"
+                          : totalNotificationCount}
+                      </span>
+                    )}
+
+                  </div>
                 </Link>
 
                 <Link
@@ -2921,7 +3260,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between gap-3">
 
                     <span>
-                      主從聊天室
+                      通訊中心
                     </span>
 
                     {chatUnreadCount >
