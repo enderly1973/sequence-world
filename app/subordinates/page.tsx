@@ -35,6 +35,8 @@ type Subordinate = {
 
   join_sequence: number;
 
+  relation_id: string;
+
   relation_type:
     | "automatic"
     | "voluntary"
@@ -47,6 +49,8 @@ type Subordinate = {
 };
 
 type RelationRow = {
+  id: string;
+
   subordinate_id: string;
 
   relation_type:
@@ -133,6 +137,14 @@ export default function SubordinatesPage() {
   const [
     releasingId,
     setReleasingId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    swappingId,
+    setSwappingId,
   ] =
     useState<string | null>(
       null
@@ -283,6 +295,7 @@ export default function SubordinatesPage() {
             "hierarchy_relations"
           )
           .select(`
+            id,
             subordinate_id,
             relation_type,
             created_at
@@ -451,6 +464,9 @@ export default function SubordinatesPage() {
                 join_sequence:
                   member.join_sequence,
 
+                relation_id:
+                  relation.id,
+
                 relation_type:
                   relation.relation_type,
 
@@ -561,6 +577,64 @@ export default function SubordinatesPage() {
     }
   }
 
+  async function handleRequestSwap(
+    subordinate: Subordinate
+  ) {
+    if (
+      swappingId ||
+      releasingId
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `確定要向「${subordinate.nickname}」提出地位交換申請嗎？\n\n對方同意後，你們目前的主人與從屬者地位將互換。`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setSwappingId(
+      subordinate.id
+    );
+
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          "request_hierarchy_swap",
+          {
+            p_relation_id:
+              subordinate.relation_id,
+          }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setSuccessMessage(
+        `已向「${subordinate.nickname}」提出地位交換申請。`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "提出地位交換申請時發生錯誤。"
+      );
+    } finally {
+      setSwappingId(
+        null
+      );
+    }
+  }
+
   async function handleReleaseSubordinate(
     subordinate: Subordinate
   ) {
@@ -571,9 +645,9 @@ export default function SubordinatesPage() {
     }
 
     const confirmed =
-  window.confirm(
-    `確定要解除與「${subordinate.nickname}」的主從關係嗎？\n\n解除後，雙方將無法繼續使用此主從聊天室。`
-  );
+      window.confirm(
+        `確定要解除與「${subordinate.nickname}」的主從關係嗎？\n\n解除後，雙方將無法繼續使用此主從聊天室。`
+      );
 
     if (
       !confirmed
@@ -1085,8 +1159,29 @@ export default function SubordinatesPage() {
                           <button
                             type="button"
                             disabled={
+                              swappingId !== null ||
+                              releasingId !== null
+                            }
+                            onClick={() =>
+                              void handleRequestSwap(
+                                subordinate
+                              )
+                            }
+                            className="rounded-lg border border-violet-900 px-4 py-2 text-sm text-violet-300 transition hover:border-violet-700 hover:bg-violet-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {swappingId ===
+                            subordinate.id
+                              ? "申請中…"
+                              : "申請地位交換"}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
                               releasingId !==
-                              null
+                                null ||
+                              swappingId !==
+                                null
                             }
                             onClick={() =>
                               void handleReleaseSubordinate(
