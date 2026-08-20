@@ -229,42 +229,29 @@ export default function CreateTaskPage() {
 
       const {
         data:
-          relationData,
+          canAssignData,
         error:
-          relationError,
+          canAssignError,
       } =
-        await supabase
-          .from(
-            "hierarchy_relations"
-          )
-          .select(
-            "subordinate_id"
-          )
-          .eq(
-            "superior_id",
-            user.id
-          )
-          .eq(
-            "subordinate_id",
-            receiverId
-          )
-          .eq(
-            "status",
-            "active"
-          )
-          .maybeSingle();
+        await supabase.rpc(
+          "can_assign_task_to_user",
+          {
+            p_target_user_id:
+              receiverId,
+          }
+        );
 
       if (
-        relationError
+        canAssignError
       ) {
-        throw relationError;
+        throw canAssignError;
       }
 
       if (
-        !relationData
+        !canAssignData
       ) {
         throw new Error(
-          "你目前不是這位成員的直接上級，無法發送任務。"
+          "你只能對第一代或第二代附屬者發送任務。"
         );
       }
 
@@ -476,7 +463,7 @@ export default function CreateTaskPage() {
       window.setTimeout(
         () => {
           router.push(
-            "/subordinates"
+            "/hierarchy"
           );
 
           router.refresh();
@@ -542,7 +529,6 @@ export default function CreateTaskPage() {
         ?.can_send_task
     );
 
-
   const rewardNumber =
     Number.parseInt(
       rewardPoints || "0",
@@ -593,16 +579,16 @@ export default function CreateTaskPage() {
             </h1>
 
             <p className="mt-3 text-neutral-400">
-              對你的直接從屬者建立任務。
+              對你的第一代或第二代附屬者建立任務。
             </p>
 
           </div>
 
           <Link
-            href="/subordinates"
+            href="/hierarchy"
             className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
           >
-            返回從屬者管理
+            返回階級關係
           </Link>
 
         </header>
@@ -619,7 +605,7 @@ export default function CreateTaskPage() {
             </h2>
 
             <p className="mt-3 leading-7 text-red-100/80">
-              你的世界積分已耗盡，目前無法主動建立新的從屬者任務。
+              你的世界積分已耗盡，目前無法主動建立新的附屬者任務。
               世界積分恢復至 1 以上後，即可重新使用發送任務功能。
             </p>
 
@@ -716,10 +702,10 @@ export default function CreateTaskPage() {
                 <div className="mt-5">
 
                   <Link
-                    href="/subordinates"
+                    href="/hierarchy"
                     className="inline-flex rounded-lg border border-neutral-700 px-5 py-3 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
                   >
-                    返回從屬者管理
+                    返回階級關係
                   </Link>
 
                 </div>
@@ -979,7 +965,7 @@ export default function CreateTaskPage() {
                 <div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-neutral-800 pt-6">
 
                   <Link
-                    href="/subordinates"
+                    href="/hierarchy"
                     className="rounded-lg border border-neutral-700 px-5 py-3 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
                   >
                     取消

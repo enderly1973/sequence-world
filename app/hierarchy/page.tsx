@@ -43,6 +43,22 @@ type SubordinateInfo = {
   subordinateRank: number | null;
 };
 
+type DescendantRow = {
+  relation_id: string;
+  user_id: string;
+  parent_id: string;
+  depth: number;
+  subordinate_rank: number | null;
+};
+
+type SecondGenerationInfo = {
+  relationId: string;
+  profile: ProfileSummary;
+  parentId: string;
+  parentProfile: ProfileSummary | null;
+  subordinateRank: number | null;
+};
+
 export default function HierarchyPage() {
   const router = useRouter();
 
@@ -55,7 +71,11 @@ export default function HierarchyPage() {
   const [subordinates, setSubordinates] =
     useState<SubordinateInfo[]>([]);
 
-  const [loading, setLoading] = useState(true);
+  const [secondGeneration, setSecondGeneration] =
+    useState<SecondGenerationInfo[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
 
   const [leaving, setLeaving] =
     useState(false);
@@ -130,6 +150,9 @@ export default function HierarchyPage() {
         profileData as ProfileSummary
       );
 
+      /*
+       * 我的上級
+       */
       const {
         data: superiorRelation,
         error: superiorRelationError,
@@ -144,8 +167,14 @@ export default function HierarchyPage() {
           created_at,
           subordinate_rank
         `)
-        .eq("subordinate_id", user.id)
-        .eq("status", "active")
+        .eq(
+          "subordinate_id",
+          user.id
+        )
+        .eq(
+          "status",
+          "active"
+        )
         .maybeSingle();
 
       if (superiorRelationError) {
@@ -228,6 +257,9 @@ export default function HierarchyPage() {
         setSuperior(null);
       }
 
+      /*
+       * 第一代：直接附屬者
+       */
       const {
         data: subordinateRelations,
         error: subordinateRelationsError,
@@ -269,129 +301,328 @@ export default function HierarchyPage() {
           []
         ) as RelationRow[];
 
-      if (
-        relationRows.length ===
-        0
-      ) {
-        setSubordinates([]);
-        return;
-      }
-
-      const subordinateIds =
-        relationRows.map(
-          (relation) =>
-            relation.subordinate_id
-        );
-
-      const {
-        data: subordinateProfiles,
-        error:
-          subordinateProfilesError,
-      } = await supabase
-        .from("profiles")
-        .select(`
-          id,
-          nickname,
-          gender,
-          join_sequence
-        `)
-        .in(
-          "id",
-          subordinateIds
-        );
+      let directSubordinates:
+        SubordinateInfo[] = [];
 
       if (
-        subordinateProfilesError
+        relationRows.length > 0
       ) {
-        throw subordinateProfilesError;
-      }
-
-      const profileMap =
-        new Map(
-          (
-            subordinateProfiles as ProfileSummary[]
-          ).map(
-            (profile) => [
-              profile.id,
-              profile,
-            ]
-          )
-        );
-
-      const combinedData =
-        relationRows
-          .map(
-            (relation) => {
-              const profile =
-                profileMap.get(
-                  relation.subordinate_id
-                );
-
-              if (!profile) {
-                return null;
-              }
-
-              return {
-                relationId:
-                  relation.id,
-
-                profile,
-
-                relationType:
-                  relation.relation_type,
-
-                createdAt:
-                  relation.created_at,
-
-                subordinateRank:
-                  relation.subordinate_rank,
-              };
-            }
-          )
-          .filter(
-            (
-              item
-            ): item is SubordinateInfo =>
-              item !== null
-          )
-          .sort(
-            (a, b) => {
-              if (
-                a.subordinateRank !==
-                  null &&
-                b.subordinateRank !==
-                  null
-              ) {
-                return (
-                  a.subordinateRank -
-                  b.subordinateRank
-                );
-              }
-
-              if (
-                a.subordinateRank !==
-                null
-              ) {
-                return -1;
-              }
-
-              if (
-                b.subordinateRank !==
-                null
-              ) {
-                return 1;
-              }
-
-              return (
-                a.profile.join_sequence -
-                b.profile.join_sequence
-              );
-            }
+        const subordinateIds =
+          relationRows.map(
+            (relation) =>
+              relation.subordinate_id
           );
 
+        const {
+          data: subordinateProfiles,
+          error:
+            subordinateProfilesError,
+        } = await supabase
+          .from("profiles")
+          .select(`
+            id,
+            nickname,
+            gender,
+            join_sequence
+          `)
+          .in(
+            "id",
+            subordinateIds
+          );
+
+        if (
+          subordinateProfilesError
+        ) {
+          throw subordinateProfilesError;
+        }
+
+        const profileMap =
+          new Map(
+            (
+              subordinateProfiles as ProfileSummary[]
+            ).map(
+              (profile) => [
+                profile.id,
+                profile,
+              ]
+            )
+          );
+
+        directSubordinates =
+          relationRows
+            .map(
+              (relation) => {
+                const profile =
+                  profileMap.get(
+                    relation.subordinate_id
+                  );
+
+                if (!profile) {
+                  return null;
+                }
+
+                return {
+                  relationId:
+                    relation.id,
+
+                  profile,
+
+                  relationType:
+                    relation.relation_type,
+
+                  createdAt:
+                    relation.created_at,
+
+                  subordinateRank:
+                    relation.subordinate_rank,
+                };
+              }
+            )
+            .filter(
+              (
+                item
+              ): item is SubordinateInfo =>
+                item !== null
+            )
+            .sort(
+              (a, b) => {
+                if (
+                  a.subordinateRank !==
+                    null &&
+                  b.subordinateRank !==
+                    null
+                ) {
+                  return (
+                    a.subordinateRank -
+                    b.subordinateRank
+                  );
+                }
+
+                if (
+                  a.subordinateRank !==
+                  null
+                ) {
+                  return -1;
+                }
+
+                if (
+                  b.subordinateRank !==
+                  null
+                ) {
+                  return 1;
+                }
+
+                return (
+                  a.profile
+                    .join_sequence -
+                  b.profile
+                    .join_sequence
+                );
+              }
+            );
+      }
+
       setSubordinates(
-        combinedData
+        directSubordinates
       );
+
+      /*
+       * 第二代：直接附屬者的附屬者
+       */
+      const {
+        data: descendantData,
+        error: descendantError,
+      } = await supabase.rpc(
+        "get_my_hierarchy_descendants"
+      );
+
+      if (descendantError) {
+        throw descendantError;
+      }
+
+      const descendants =
+        (
+          descendantData ??
+          []
+        ) as DescendantRow[];
+
+      const secondRows =
+        descendants.filter(
+          (item) =>
+            Number(item.depth) ===
+            2
+        );
+
+      if (
+        secondRows.length === 0
+      ) {
+        setSecondGeneration(
+          []
+        );
+      } else {
+        const secondUserIds =
+          Array.from(
+            new Set(
+              secondRows.map(
+                (item) =>
+                  item.user_id
+              )
+            )
+          );
+
+        const parentIds =
+          Array.from(
+            new Set(
+              secondRows.map(
+                (item) =>
+                  item.parent_id
+              )
+            )
+          );
+
+        const allProfileIds =
+          Array.from(
+            new Set([
+              ...secondUserIds,
+              ...parentIds,
+            ])
+          );
+
+        const {
+          data:
+            secondProfileData,
+          error:
+            secondProfileError,
+        } = await supabase
+          .from("profiles")
+          .select(`
+            id,
+            nickname,
+            gender,
+            join_sequence
+          `)
+          .in(
+            "id",
+            allProfileIds
+          );
+
+        if (
+          secondProfileError
+        ) {
+          throw secondProfileError;
+        }
+
+        const secondProfileMap =
+          new Map(
+            (
+              secondProfileData as ProfileSummary[]
+            ).map(
+              (profile) => [
+                profile.id,
+                profile,
+              ]
+            )
+          );
+
+        const secondResult =
+          secondRows
+            .map(
+              (row) => {
+                const profile =
+                  secondProfileMap.get(
+                    row.user_id
+                  );
+
+                if (!profile) {
+                  return null;
+                }
+
+                return {
+                  relationId:
+                    row.relation_id,
+
+                  profile,
+
+                  parentId:
+                    row.parent_id,
+
+                  parentProfile:
+                    secondProfileMap.get(
+                      row.parent_id
+                    ) ?? null,
+
+                  subordinateRank:
+                    row.subordinate_rank,
+                };
+              }
+            )
+            .filter(
+              (
+                item
+              ): item is SecondGenerationInfo =>
+                item !== null
+            )
+            .sort(
+              (a, b) => {
+                const parentA =
+                  a.parentProfile
+                    ?.join_sequence ??
+                  Number.MAX_SAFE_INTEGER;
+
+                const parentB =
+                  b.parentProfile
+                    ?.join_sequence ??
+                  Number.MAX_SAFE_INTEGER;
+
+                if (
+                  parentA !==
+                  parentB
+                ) {
+                  return (
+                    parentA -
+                    parentB
+                  );
+                }
+
+                if (
+                  a.subordinateRank !==
+                    null &&
+                  b.subordinateRank !==
+                    null
+                ) {
+                  return (
+                    a.subordinateRank -
+                    b.subordinateRank
+                  );
+                }
+
+                if (
+                  a.subordinateRank !==
+                  null
+                ) {
+                  return -1;
+                }
+
+                if (
+                  b.subordinateRank !==
+                  null
+                ) {
+                  return 1;
+                }
+
+                return (
+                  a.profile
+                    .join_sequence -
+                  b.profile
+                    .join_sequence
+                );
+              }
+            );
+
+        setSecondGeneration(
+          secondResult
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -955,18 +1186,18 @@ export default function HierarchyPage() {
 
         </section>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+        <section className="mb-6 rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
 
           <div className="flex items-center justify-between gap-4">
 
             <div>
 
               <p className="text-sm text-neutral-500">
-                我的直接從屬者
+                第一代・我的直接附屬者
               </p>
 
               <p className="mt-2 text-sm text-neutral-400">
-                可由你安排旗下直接從屬者的階級順位。
+                由你直接管理，可調整旗下順位。
               </p>
 
             </div>
@@ -983,7 +1214,7 @@ export default function HierarchyPage() {
           0 ? (
 
             <div className="mt-5 rounded-xl bg-neutral-950 p-5 text-neutral-400">
-              目前沒有直接從屬者。
+              目前沒有直接附屬者。
             </div>
 
           ) : (
@@ -1064,7 +1295,7 @@ export default function HierarchyPage() {
                     <div className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
 
                       <p className="text-sm font-medium text-neutral-300">
-                        從屬者階級順位
+                        附屬者階級順位
                       </p>
 
                       <p className="mt-1 text-xs leading-5 text-neutral-500">
@@ -1164,7 +1395,7 @@ export default function HierarchyPage() {
                         href={`/members/${item.profile.id}`}
                         className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
                       >
-                        查看從屬者
+                        查看附屬者
                       </Link>
 
                       <button
@@ -1189,6 +1420,154 @@ export default function HierarchyPage() {
                           ? "申請中…"
                           : "申請地位交換"}
                       </button>
+
+                    </div>
+
+                  </article>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+
+            <div>
+
+              <p className="text-sm text-neutral-500">
+                第二代・附屬者的附屬者
+              </p>
+
+              <p className="mt-2 text-sm text-neutral-400">
+                顯示你旗下第一代成員所管理的直接附屬者。
+              </p>
+
+            </div>
+
+            <span className="text-sm text-neutral-400">
+              共 {
+                secondGeneration.length
+              } 人
+            </span>
+
+          </div>
+
+          {secondGeneration.length ===
+          0 ? (
+
+            <div className="mt-5 rounded-xl bg-neutral-950 p-5 text-neutral-400">
+              目前沒有第二代附屬者。
+            </div>
+
+          ) : (
+
+            <div className="mt-5 space-y-3">
+
+              {secondGeneration.map(
+                (item) => (
+
+                  <article
+                    key={
+                      item.relationId
+                    }
+                    className="rounded-xl border border-neutral-800 bg-neutral-950 p-5"
+                  >
+
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+
+                      <div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+
+                          <Link
+                            href={`/members/${item.profile.id}`}
+                            className="text-lg font-medium transition hover:underline"
+                          >
+                            {
+                              item.profile.nickname
+                            }
+                          </Link>
+
+                          <span className="rounded-full border border-sky-900 bg-sky-950/20 px-3 py-1 text-xs text-sky-300">
+                            第二代
+                          </span>
+
+                          {item.subordinateRank !==
+                          null && (
+                            <span className="rounded-full border border-neutral-700 px-3 py-1 text-xs text-neutral-300">
+                              在直屬主人名下第{" "}
+                              {
+                                item.subordinateRank
+                              }{" "}
+                              位
+                            </span>
+                          )}
+
+                        </div>
+
+                        <p className="mt-2 text-sm text-neutral-500">
+                          序號{" "}
+                          {formatSequence(
+                            item.profile.join_sequence
+                          )}
+                          ・
+                          {getGenderLabel(
+                            item.profile.gender
+                          )}
+                        </p>
+
+                        <p className="mt-3 text-sm text-neutral-400">
+                          直屬主人：
+                          {item.parentProfile ? (
+                            <>
+                              {" "}
+                              <Link
+                                href={`/members/${item.parentProfile.id}`}
+                                className="text-neutral-200 transition hover:underline"
+                              >
+                                {
+                                  item.parentProfile.nickname
+                                }
+                              </Link>
+
+                              <span className="text-neutral-600">
+                                {" "}
+                                ・序號{" "}
+                                {formatSequence(
+                                  item.parentProfile.join_sequence
+                                )}
+                              </span>
+                            </>
+                          ) : (
+                            " 無法取得資料"
+                          )}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3 border-t border-neutral-800 pt-4">
+
+                      <Link
+                        href={`/members/${item.profile.id}`}
+                        className="inline-flex rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-300 transition hover:border-neutral-500 hover:text-white"
+                      >
+                        查看第二代成員
+                      </Link>
+
+                      <Link
+                        href={`/tasks/create/${item.profile.id}`}
+                        className="inline-flex rounded-lg border border-emerald-900 px-4 py-2 text-sm text-emerald-300 transition hover:border-emerald-700 hover:bg-emerald-950/20"
+                      >
+                        派發任務
+                      </Link>
 
                     </div>
 
